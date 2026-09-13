@@ -5,7 +5,7 @@
   gather_facts: true
 
   vars:
-    bench_user: "{{ lookup('ansible.builtin.env', 'USER') }}"
+    bench_user: "{{ lookup('ansible.builtin.env', 'SUDO_USER') | default(lookup('ansible.builtin.env', 'USER'), true) }}"
 
   pre_tasks:
     - name: Validate the invoking user

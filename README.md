@@ -6,7 +6,7 @@ administrace bude žít v samostatném repozitáři.
 
 ## První milestone
 
-Aktuální provisioning podporuje čistou instalaci Ubuntu Server 24.04 LTS na
+Aktuální provisioning podporuje čistou instalaci Ubuntu Server 24.04 nebo 26.04 LTS na
 architekturách AMD64 a ARM64. Nainstaluje a nastaví pouze:
 
 - základní balíčky `ca-certificates` a `curl`,
@@ -20,7 +20,7 @@ Caddy, Tailscale, Portless, zálohy, správa secrets, Bench Manager a projektov�
 
 ## Požadavky
 
-- Ubuntu Server 24.04 LTS,
+- Ubuntu Server 24.04 nebo 26.04 LTS,
 - uživatel s oprávněním `sudo`,
 - připojení k internetu.
 
@@ -46,7 +46,7 @@ skupině `docker`.
 Pokud už je Ansible nainstalovaný, lze provisioning spustit přímo:
 
 ```bash
-ansible-playbook --ask-become-pass \
+sudo ansible-playbook \
   --inventory ansible/inventory/hosts.yml \
   ansible/playbook.yml
 ```

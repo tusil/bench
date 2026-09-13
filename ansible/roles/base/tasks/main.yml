@@ -3,9 +3,9 @@
   ansible.builtin.assert:
     that:
       - ansible_distribution == 'Ubuntu'
-      - ansible_distribution_version == '24.04'
+      - ansible_distribution_version in ['24.04', '26.04']
       - ansible_architecture in ['x86_64', 'aarch64']
-    fail_msg: Bench supports Ubuntu 24.04 LTS on AMD64 and ARM64 only.
+    fail_msg: Bench supports Ubuntu 24.04 or 26.04 LTS on AMD64 and ARM64 only.
 
 - name: Install base packages
   ansible.builtin.apt:

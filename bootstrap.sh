@@ -12,7 +12,6 @@ repository_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 sudo apt-get update
 sudo apt-get install --yes ansible-core
 
-ansible-playbook \
-  --ask-become-pass \
+sudo ansible-playbook \
   --inventory "${repository_dir}/ansible/inventory/hosts.yml" \
   "${repository_dir}/ansible/playbook.yml"
