@@ -25,6 +25,8 @@ https://*.{{ caddy_bench_domain }} {
 	import bench_tls
 	route {
 		import /etc/bench/caddy/generated/*.caddy
-		respond "Bench Caddy is running"
+		reverse_proxy unix//run/bench/manager.sock {
+			header_up Host {host}
+		}
 	}
 }

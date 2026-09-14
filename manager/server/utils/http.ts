@@ -2,8 +2,27 @@ import type { H3Event } from "h3";
 import { getHeader, getRouterParam, readBody } from "h3";
 import { ManagerError, projectService } from "./bench";
 
-export function isAllowedMutation(origin: string | undefined, contentType: string | undefined, expectedOrigin: string): boolean {
-  return origin === expectedOrigin && contentType?.toLowerCase().startsWith("application/json") === true;
+export type MutationSource =
+  | { kind: "manager" }
+  | { kind: "project"; origin: string };
+
+export function mutationSource(
+  origin: string | undefined,
+  host: string | undefined,
+  contentType: string | undefined,
+  managerOrigin: string,
+): MutationSource | undefined {
+  if (!origin || !host || contentType?.toLowerCase().startsWith("application/json") !== true) return undefined;
+
+  try {
+    const requestOrigin = new URL(origin);
+    const expectedManagerOrigin = new URL(managerOrigin);
+    if (requestOrigin.host.toLowerCase() !== host.toLowerCase()) return undefined;
+    if (requestOrigin.origin === expectedManagerOrigin.origin) return { kind: "manager" };
+    return { kind: "project", origin: requestOrigin.origin };
+  } catch {
+    return undefined;
+  }
 }
 
 function asHttpError(error: unknown): never {
@@ -19,13 +38,19 @@ function asHttpError(error: unknown): never {
 
 export async function projectAction(event: H3Event, action: "up" | "down") {
   const config = useRuntimeConfig(event);
-  if (!isAllowedMutation(getHeader(event, "origin"), getHeader(event, "content-type"), config.managerOrigin)) {
+  const source = mutationSource(
+    getHeader(event, "origin"),
+    getHeader(event, "host"),
+    getHeader(event, "content-type"),
+    config.public.managerOrigin,
+  );
+  if (!source) {
     throw createError({ statusCode: 403, statusMessage: "Forbidden" });
   }
   await readBody(event);
   const id = getRouterParam(event, "id");
   try {
-    return await projectService.action(id || "", action);
+    return await projectService.action(id || "", action, source.kind === "project" ? source.origin : undefined);
   } catch (error) {
     asHttpError(error);
   }

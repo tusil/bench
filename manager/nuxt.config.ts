@@ -7,7 +7,9 @@ export default defineNuxtConfig({
     preset: "node-server",
   },
   runtimeConfig: {
-    managerOrigin: "http://localhost:3000",
+    public: {
+      managerOrigin: "http://localhost:3000",
+    },
   },
   typescript: {
     strict: true,

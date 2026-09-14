@@ -92,9 +92,12 @@ export function createProjectService(execute: BenchExecutor = executeBench) {
       return { projects };
     },
 
-    async action(id: string, action: "up" | "down"): Promise<ActionResponse> {
+    async action(id: string, action: "up" | "down", routeOrigin?: string): Promise<ActionResponse> {
       if (!id || id.includes("/") || id === "." || id === "..") {
         throw new ManagerError("Project not found", 404);
+      }
+      if (routeOrigin && action !== "up") {
+        throw new ManagerError("Project routes may only start their own project", 403);
       }
       if (actionInProgress) {
         throw new ManagerError("Another project operation is already running", 409);
@@ -104,6 +107,9 @@ export function createProjectService(execute: BenchExecutor = executeBench) {
       try {
         const project = (await rawProjects()).find((candidate) => candidate.id === id);
         if (!project) throw new ManagerError("Project not found", 404);
+        if (routeOrigin && !project.routes.includes(routeOrigin)) {
+          throw new ManagerError("Project route does not match this project", 403);
+        }
         if (project.state === "invalid") {
           throw new ManagerError(project.error || "Project configuration is invalid", 409);
         }

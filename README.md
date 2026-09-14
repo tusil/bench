@@ -13,7 +13,7 @@ architekturách AMD64 a ARM64. Nainstaluje a nastaví:
 - Git,
 - Tailscale a připojení serveru k existujícímu tailnetu,
 - Caddy kontejner s veřejně důvěryhodným wildcard certifikátem přes DuckDNS DNS challenge,
-- privátní HTTPS na Tailscale adrese a testovací odpověď pro `*.bench.example.dev`,
+- privátní HTTPS na Tailscale adrese a stavovou stránku pro vypnuté projekty,
 - Docker Engine a containerd z oficiálního Docker APT repozitáře,
 - Docker Compose plugin,
 - externí Docker network `bench-proxy` pro budoucí napojení projektů,
@@ -81,7 +81,9 @@ Manager je po provisioningu dostupný pouze z tailnetu na
 `https://bench.example.dev`. Zobrazuje přímé podadresáře nakonfigurovaného
 adresáře projektů, které obsahují `bench.yml`, jejich routy a stav. Projekty lze
 z rozhraní spustit a zastavit; konfigurace se nadále upravuje přímo v
-`bench.yml`.
+`bench.yml`. URL vypnutého projektu zobrazí jeho stav a tlačítko pro spuštění.
+Po úspěšném spuštění se stejná URL automaticky načte z projektu. Neznámé
+subdomény zobrazí pouze stránku 404 s odkazem na Manager.
 
 ## Požadavky
 

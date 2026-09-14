@@ -4,10 +4,27 @@ import type {
   ProjectState,
   ProjectsResponse,
 } from "~~/shared/types/projects";
+import {
+  findProjectByHostname,
+  hostnameFromUrl,
+} from "~~/shared/utils/projects";
 
 const toast = useToast();
+const config = useRuntimeConfig();
+const requestUrl = useRequestURL();
 const activeProject = ref<string>();
 const { data, error, refresh, status } = await useFetch<ProjectsResponse>("/api/projects");
+
+const managerOrigin = config.public.managerOrigin;
+const isDashboard = requestUrl.hostname.toLowerCase() === hostnameFromUrl(managerOrigin);
+const routedProject = computed(() => data.value
+  ? findProjectByHostname(data.value.projects, requestUrl.hostname)
+  : undefined);
+
+if (import.meta.server && !isDashboard && data.value && !routedProject.value) {
+  const event = useRequestEvent();
+  if (event) setResponseStatus(event, 404);
+}
 
 const statePresentation: Record<ProjectState, {
   label: string;
@@ -35,10 +52,14 @@ async function run(id: string, action: "up" | "down") {
       body: {},
     });
     toast.add({ title: result.message, color: "success" });
+    if (!isDashboard && action === "up") {
+      window.location.reload();
+      return;
+    }
   } catch (cause) {
     toast.add({ title: "Operation failed", description: responseError(cause), color: "error" });
   } finally {
-    await refresh();
+    if (isDashboard) await refresh();
     activeProject.value = undefined;
   }
 }
@@ -46,7 +67,10 @@ async function run(id: string, action: "up" | "down") {
 
 <template>
   <UApp>
-    <main class="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-10 sm:px-6 lg:px-8">
+    <main
+      v-if="isDashboard"
+      class="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-10 sm:px-6 lg:px-8"
+    >
       <header class="mb-10 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p class="mb-2 text-xs font-semibold uppercase tracking-[0.22em] text-primary">
@@ -158,6 +182,91 @@ async function run(id: string, action: "up" | "down") {
           </div>
         </UCard>
       </section>
+    </main>
+
+    <main
+      v-else
+      class="mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center px-4 py-10 sm:px-6"
+    >
+      <a :href="managerOrigin" class="mb-6 w-fit text-xs font-semibold uppercase tracking-[0.22em] text-primary hover:underline">
+        Youngmedia Bench
+      </a>
+
+      <USkeleton v-if="status === 'pending' && !data" class="h-72 rounded-xl" />
+
+      <UCard v-else-if="error" variant="subtle">
+        <h1 class="text-2xl font-semibold tracking-tight text-highlighted">
+          Project status is unavailable
+        </h1>
+        <p class="mt-3 text-sm text-error">
+          {{ responseError(error) }}
+        </p>
+        <div class="mt-6 flex gap-2">
+          <UButton :loading="status === 'pending'" @click="refresh()">
+            Retry
+          </UButton>
+          <UButton :to="managerOrigin" color="neutral" variant="outline" external>
+            Open Bench Manager
+          </UButton>
+        </div>
+      </UCard>
+
+      <UCard v-else-if="routedProject" variant="subtle">
+        <div class="mb-6 flex items-start justify-between gap-4">
+          <div>
+            <p class="text-sm text-muted">
+              Project
+            </p>
+            <h1 class="mt-1 text-2xl font-semibold tracking-tight text-highlighted">
+              {{ routedProject.name || routedProject.id }}
+              {{ routedProject.state === "degraded" ? "needs attention" : "is not running" }}
+            </h1>
+          </div>
+          <UBadge :color="statePresentation[routedProject.state].color" variant="subtle">
+            {{ statePresentation[routedProject.state].label }}
+          </UBadge>
+        </div>
+
+        <p class="text-sm text-muted">
+          Start the project to continue to this address.
+        </p>
+        <UAlert
+          v-if="routedProject.error"
+          class="mt-5"
+          color="warning"
+          variant="subtle"
+          title="Project state is inconsistent"
+          :description="routedProject.error"
+        />
+
+        <div class="mt-7 flex flex-wrap gap-2 border-t border-default pt-5">
+          <UButton
+            :loading="activeProject === routedProject.id"
+            :disabled="Boolean(activeProject)"
+            @click="run(routedProject.id, 'up')"
+          >
+            {{ routedProject.state === "degraded" ? "Start again" : "Start project" }}
+          </UButton>
+          <UButton :to="managerOrigin" color="neutral" variant="outline" external>
+            Open Bench Manager
+          </UButton>
+        </div>
+      </UCard>
+
+      <UCard v-else variant="subtle">
+        <p class="text-sm font-medium text-primary">
+          404
+        </p>
+        <h1 class="mt-2 text-2xl font-semibold tracking-tight text-highlighted">
+          Unknown Bench project
+        </h1>
+        <p class="mt-3 text-sm text-muted">
+          This hostname is not configured as a route for any project.
+        </p>
+        <UButton :to="managerOrigin" class="mt-7" color="neutral" variant="outline" external>
+          Open Bench Manager
+        </UButton>
+      </UCard>
     </main>
   </UApp>
 </template>
