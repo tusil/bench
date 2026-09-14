@@ -27,5 +27,6 @@
 
   roles:
     - role: base
+    - role: tailscale
     - role: docker
     - role: projects

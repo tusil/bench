@@ -1,0 +1,93 @@
+---
+- name: Validate the Tailscale hostname
+  ansible.builtin.assert:
+    that:
+      - tailscale_hostname | length > 0
+    fail_msg: Set TS_HOSTNAME in .env or in the environment.
+
+- name: Create the APT keyring directory
+  ansible.builtin.file:
+    path: /usr/share/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the Tailscale repository signing key
+  ansible.builtin.get_url:
+    url: "https://pkgs.tailscale.com/stable/ubuntu/{{ ansible_distribution_release }}.noarmor.gpg"
+    dest: /usr/share/keyrings/tailscale-archive-keyring.gpg
+    owner: root
+    group: root
+    mode: "0644"
+  register: tailscale_apt_key
+
+- name: Configure the Tailscale APT repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg]
+      https://pkgs.tailscale.com/stable/ubuntu
+      {{ ansible_distribution_release }} main
+    filename: tailscale
+    state: present
+    update_cache: false
+  register: tailscale_apt_repository
+
+- name: Update the APT cache for Tailscale repository changes
+  ansible.builtin.apt:
+    update_cache: true
+  when: tailscale_apt_key.changed or tailscale_apt_repository.changed
+
+- name: Install Tailscale
+  ansible.builtin.apt:
+    name: tailscale
+    state: present
+
+- name: Enable and start Tailscale
+  ansible.builtin.service:
+    name: tailscaled
+    enabled: true
+    state: started
+
+- name: Read the Tailscale status
+  ansible.builtin.command:
+    argv:
+      - tailscale
+      - status
+      - --json
+  register: tailscale_status
+  changed_when: false
+
+- name: Parse the Tailscale status
+  ansible.builtin.set_fact:
+    tailscale_status_data: "{{ tailscale_status.stdout | from_json }}"
+
+- name: Validate the Tailscale auth key for a disconnected server
+  ansible.builtin.assert:
+    that:
+      - tailscale_auth_key | length > 0
+    fail_msg: >-
+      Set TS_AUTHKEY in .env or in the environment to connect this server to
+      Tailscale.
+  when: tailscale_status_data.BackendState != 'Running'
+
+- name: Connect the server to Tailscale
+  ansible.builtin.command:
+    argv:
+      - tailscale
+      - up
+      - "--auth-key={{ tailscale_auth_key }}"
+      - "--hostname={{ tailscale_hostname }}"
+  when: tailscale_status_data.BackendState != 'Running'
+  no_log: true
+
+- name: Update the Tailscale hostname
+  ansible.builtin.command:
+    argv:
+      - tailscale
+      - set
+      - "--hostname={{ tailscale_hostname }}"
+  when:
+    - tailscale_status_data.BackendState == 'Running'
+    - tailscale_status_data.Self.HostName | default('') != tailscale_hostname
+  changed_when: true
