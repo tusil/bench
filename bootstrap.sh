@@ -9,19 +9,23 @@ fi
 
 repository_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 environment_file="${repository_dir}/.env"
+export ANSIBLE_CONFIG="${repository_dir}/ansible.cfg"
 
-shell_ts_hostname_is_set=false
-shell_ts_authkey_is_set=false
+environment_variables=(
+  TS_HOSTNAME
+  TS_AUTHKEY
+  BENCH_DOMAIN
+  DUCKDNS_DOMAIN
+  DUCKDNS_API_TOKEN
+)
 
-if [[ -v TS_HOSTNAME ]]; then
-  shell_ts_hostname_is_set=true
-  shell_ts_hostname="${TS_HOSTNAME}"
-fi
+declare -A shell_environment=()
 
-if [[ -v TS_AUTHKEY ]]; then
-  shell_ts_authkey_is_set=true
-  shell_ts_authkey="${TS_AUTHKEY}"
-fi
+for variable in "${environment_variables[@]}"; do
+  if [[ -v ${variable} ]]; then
+    shell_environment["${variable}"]="${!variable}"
+  fi
+done
 
 if [[ -f "${environment_file}" ]]; then
   set -a
@@ -30,22 +34,30 @@ if [[ -f "${environment_file}" ]]; then
   set +a
 fi
 
-if [[ "${shell_ts_hostname_is_set}" == true ]]; then
-  export TS_HOSTNAME="${shell_ts_hostname}"
-fi
+for variable in "${environment_variables[@]}"; do
+  if [[ -v "shell_environment[${variable}]" ]]; then
+    printf -v "${variable}" '%s' "${shell_environment[${variable}]}"
+    export "${variable}"
+  fi
+done
 
-if [[ "${shell_ts_authkey_is_set}" == true ]]; then
-  export TS_AUTHKEY="${shell_ts_authkey}"
-fi
+required_environment_variables=(
+  TS_HOSTNAME
+  BENCH_DOMAIN
+  DUCKDNS_DOMAIN
+  DUCKDNS_API_TOKEN
+)
 
-if [[ -z ${TS_HOSTNAME:-} ]]; then
-  echo "Set TS_HOSTNAME in ${environment_file} or in the environment." >&2
-  exit 1
-fi
+for variable in "${required_environment_variables[@]}"; do
+  if [[ -z ${!variable:-} ]]; then
+    echo "Set ${variable} in ${environment_file} or in the environment." >&2
+    exit 1
+  fi
+done
 
 sudo apt-get update
 sudo apt-get install --yes ansible-core
 
-sudo --preserve-env=TS_HOSTNAME,TS_AUTHKEY ansible-playbook \
+sudo --preserve-env=ANSIBLE_CONFIG,TS_HOSTNAME,TS_AUTHKEY,BENCH_DOMAIN,DUCKDNS_DOMAIN,DUCKDNS_API_TOKEN ansible-playbook \
   --inventory "${repository_dir}/ansible/inventory/hosts.yml" \
   "${repository_dir}/ansible/playbook.yml"

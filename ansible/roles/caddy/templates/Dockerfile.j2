@@ -1,0 +1,12 @@
+ARG CADDY_VERSION={{ caddy_version }}
+
+FROM caddy:${CADDY_VERSION}-builder AS builder
+
+ARG CADDY_DUCKDNS_VERSION={{ caddy_duckdns_version }}
+
+RUN xcaddy build \
+    --with github.com/caddy-dns/duckdns@${CADDY_DUCKDNS_VERSION}
+
+FROM caddy:${CADDY_VERSION}
+
+COPY --from=builder /usr/bin/caddy /usr/bin/caddy

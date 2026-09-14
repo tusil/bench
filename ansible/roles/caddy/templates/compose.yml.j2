@@ -1,0 +1,34 @@
+---
+services:
+  caddy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        CADDY_VERSION: "{{ caddy_version }}"
+        CADDY_DUCKDNS_VERSION: "{{ caddy_duckdns_version }}"
+    image: "{{ caddy_image }}"
+    container_name: "{{ caddy_container }}"
+    restart: unless-stopped
+    env_file:
+      - duckdns.env
+    ports:
+      - "{{ caddy_bind_address }}:80:80"
+      - "{{ caddy_bind_address }}:443:443"
+      - "{{ caddy_bind_address }}:443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./generated:/etc/bench/caddy/generated:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - bench-proxy
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+networks:
+  bench-proxy:
+    name: {{ caddy_network }}
+    external: true

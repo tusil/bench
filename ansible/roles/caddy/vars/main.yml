@@ -1,0 +1,12 @@
+---
+caddy_version: "2.11.4"
+caddy_duckdns_version: "v0.5.0"
+caddy_image: "bench-caddy:{{ caddy_version }}-duckdns-{{ caddy_duckdns_version }}"
+caddy_container: bench-caddy
+caddy_compose_project: bench
+caddy_directory: /etc/bench/caddy
+caddy_network: bench-proxy
+
+caddy_bench_domain: "{{ lookup('ansible.builtin.env', 'BENCH_DOMAIN') }}"
+caddy_duckdns_domain: "{{ lookup('ansible.builtin.env', 'DUCKDNS_DOMAIN') }}"
+caddy_duckdns_api_token: "{{ lookup('ansible.builtin.env', 'DUCKDNS_API_TOKEN') }}"

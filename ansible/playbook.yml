@@ -22,11 +22,12 @@
 
     - name: Set the invoking user's home and primary group
       ansible.builtin.set_fact:
-        bench_home: "{{ ansible_facts.getent_passwd[bench_user][4] }}"
-        bench_primary_group: "{{ ansible_facts.getent_passwd[bench_user][2] }}"
+        bench_home: "{{ ansible_facts['getent_passwd'][bench_user][4] }}"
+        bench_primary_group: "{{ ansible_facts['getent_passwd'][bench_user][2] }}"
 
   roles:
     - role: base
     - role: tailscale
     - role: docker
+    - role: caddy
     - role: projects

@@ -1,0 +1,294 @@
+---
+- name: Validate Caddy configuration
+  ansible.builtin.assert:
+    that:
+      - caddy_bench_domain | length > 0
+      - caddy_bench_domain is match('^[A-Za-z0-9.-]+$')
+      - not caddy_bench_domain.startswith('.')
+      - not caddy_bench_domain.endswith('.')
+      - caddy_duckdns_domain | length > 0
+      - caddy_duckdns_domain is match('^[A-Za-z0-9.-]+$')
+      - not caddy_duckdns_domain.startswith('.')
+      - not caddy_duckdns_domain.endswith('.')
+      - caddy_duckdns_api_token | length == 36
+    fail_msg: Check BENCH_DOMAIN, DUCKDNS_DOMAIN and DUCKDNS_API_TOKEN.
+    quiet: true
+  no_log: true
+
+- name: Read the Tailscale IPv4 address
+  ansible.builtin.command:
+    argv:
+      - tailscale
+      - ip
+      - -4
+  register: caddy_tailscale_ip_command
+  changed_when: false
+  failed_when:
+    - caddy_tailscale_ip_command.rc != 0 or caddy_tailscale_ip_command.stdout_lines | length != 1
+
+- name: Set the Caddy bind address
+  ansible.builtin.set_fact:
+    caddy_bind_address: "{{ caddy_tailscale_ip_command.stdout | trim }}"
+
+- name: Validate the Caddy bind address
+  ansible.builtin.assert:
+    that:
+      - caddy_bind_address is match('^[0-9]{1,3}(\.[0-9]{1,3}){3}$')
+    fail_msg: Tailscale did not return a valid IPv4 address for Caddy.
+    quiet: true
+
+- name: Create the Bench Caddy directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: /etc/bench
+      owner: root
+      group: root
+      mode: "0755"
+    - path: "{{ caddy_directory }}"
+      owner: root
+      group: root
+      mode: "0755"
+    - path: "{{ caddy_directory }}/generated"
+      owner: "{{ bench_user }}"
+      group: "{{ bench_primary_group }}"
+      mode: "0755"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Check the Bench proxy network
+  ansible.builtin.command:
+    argv:
+      - docker
+      - network
+      - inspect
+      - "{{ caddy_network }}"
+  register: caddy_network_inspect
+  changed_when: false
+  failed_when: false
+
+- name: Create the Bench proxy network
+  ansible.builtin.command:
+    argv:
+      - docker
+      - network
+      - create
+      - "{{ caddy_network }}"
+  when: caddy_network_inspect.rc != 0
+
+- name: Configure the custom Caddy image
+  ansible.builtin.template:
+    src: Dockerfile.j2
+    dest: "{{ caddy_directory }}/Dockerfile"
+    owner: root
+    group: root
+    mode: "0644"
+  register: caddy_dockerfile
+
+- name: Configure the Caddy Compose project
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ caddy_directory }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Configure the DuckDNS environment
+  ansible.builtin.template:
+    src: duckdns.env.j2
+    dest: "{{ caddy_directory }}/duckdns.env"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Configure Caddy
+  ansible.builtin.template:
+    src: Caddyfile.j2
+    dest: "{{ caddy_directory }}/Caddyfile"
+    owner: root
+    group: root
+    mode: "0644"
+  register: caddy_configuration
+
+- name: Validate the Caddy Compose project
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - --project-name
+      - "{{ caddy_compose_project }}"
+      - --file
+      - "{{ caddy_directory }}/compose.yml"
+      - config
+      - --quiet
+  changed_when: false
+
+- name: Check the custom Caddy image
+  ansible.builtin.command:
+    argv:
+      - docker
+      - image
+      - inspect
+      - "{{ caddy_image }}"
+  register: caddy_image_inspect
+  changed_when: false
+  failed_when: false
+
+- name: Build the custom Caddy image
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - --project-name
+      - "{{ caddy_compose_project }}"
+      - --file
+      - "{{ caddy_directory }}/compose.yml"
+      - build
+      - --pull
+      - caddy
+  when: caddy_dockerfile.changed or caddy_image_inspect.rc != 0
+
+- name: Read the custom Caddy version
+  ansible.builtin.command:
+    argv:
+      - docker
+      - run
+      - --rm
+      - "{{ caddy_image }}"
+      - caddy
+      - version
+  register: caddy_version_command
+  changed_when: false
+
+- name: Read the custom Caddy modules
+  ansible.builtin.command:
+    argv:
+      - docker
+      - run
+      - --rm
+      - "{{ caddy_image }}"
+      - caddy
+      - list-modules
+  register: caddy_modules_command
+  changed_when: false
+
+- name: Read the custom Caddy build information
+  ansible.builtin.command:
+    argv:
+      - docker
+      - run
+      - --rm
+      - "{{ caddy_image }}"
+      - caddy
+      - build-info
+  register: caddy_build_info_command
+  changed_when: false
+
+- name: Validate the custom Caddy image
+  ansible.builtin.assert:
+    that:
+      - caddy_version_command.stdout.startswith('v' + caddy_version)
+      - "'dns.providers.duckdns' in caddy_modules_command.stdout_lines"
+      - caddy_duckdns_version in caddy_build_info_command.stdout
+    fail_msg: The custom Caddy image does not contain the requested version and DuckDNS module.
+    quiet: true
+
+- name: Read running Caddy Compose services before the update
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - --project-name
+      - "{{ caddy_compose_project }}"
+      - --file
+      - "{{ caddy_directory }}/compose.yml"
+      - ps
+      - --status
+      - running
+      - --services
+  register: caddy_running_services_before_update
+  changed_when: false
+  failed_when: false
+
+- name: Validate the Caddyfile in the custom image
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - --project-name
+      - "{{ caddy_compose_project }}"
+      - --file
+      - "{{ caddy_directory }}/compose.yml"
+      - run
+      - --rm
+      - --no-deps
+      - caddy
+      - caddy
+      - validate
+      - --config
+      - /etc/caddy/Caddyfile
+      - --adapter
+      - caddyfile
+  changed_when: false
+
+- name: Start the Caddy Compose service
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - --project-name
+      - "{{ caddy_compose_project }}"
+      - --file
+      - "{{ caddy_directory }}/compose.yml"
+      - up
+      - --detach
+      - --remove-orphans
+  register: caddy_compose_up
+  changed_when: >-
+    'Created' in (caddy_compose_up.stdout + caddy_compose_up.stderr)
+    or 'Recreated' in (caddy_compose_up.stdout + caddy_compose_up.stderr)
+    or 'Started' in (caddy_compose_up.stdout + caddy_compose_up.stderr)
+
+- name: Reload the running Caddy service after a configuration change
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - "{{ caddy_container }}"
+      - caddy
+      - reload
+      - --config
+      - /etc/caddy/Caddyfile
+      - --adapter
+      - caddyfile
+  when:
+    - caddy_configuration.changed
+    - "'caddy' in caddy_running_services_before_update.stdout_lines"
+
+- name: Read running Caddy Compose services after the update
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - --project-name
+      - "{{ caddy_compose_project }}"
+      - --file
+      - "{{ caddy_directory }}/compose.yml"
+      - ps
+      - --status
+      - running
+      - --services
+  register: caddy_running_services
+  changed_when: false
+
+- name: Verify the Caddy service
+  ansible.builtin.assert:
+    that:
+      - "'caddy' in caddy_running_services.stdout_lines"
+    fail_msg: The Caddy Compose service is not running.
+    quiet: true
