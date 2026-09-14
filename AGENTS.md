@@ -35,6 +35,17 @@ Do not add yet:
 - secrets management
 - project templates
 
+## Bench Manager UI
+
+- Use Nuxt UI components first for UI patterns they support, including buttons, links, cards, badges, alerts, empty states, loading states and page structure.
+- Do not recreate a component with raw HTML and Tailwind when Nuxt UI already provides it.
+- Use Tailwind primarily for layout, positioning, spacing, sizing, responsive behavior, truncation and basic content typography.
+- Prefer component props, variants and slots over utility classes.
+- Use a component's `ui` override only for necessary slot layout that cannot be applied to its root; do not use it to create a custom visual style.
+- Keep the default Nuxt UI colors, radii, shadows and backgrounds unless the user explicitly requests a theme change.
+- Use native HTML for semantic content when a Nuxt UI component would not add useful behavior or structure.
+- Before adding custom CSS, verify that Nuxt UI does not already provide the required component, prop, variant or design token.
+
 ## Git
 
 Use Conventional Commits:

@@ -67,206 +67,204 @@ async function run(id: string, action: "up" | "down") {
 
 <template>
   <UApp>
-    <main
-      v-if="isDashboard"
-      class="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-10 sm:px-6 lg:px-8"
-    >
-      <header class="mb-10 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p class="mb-2 text-xs font-semibold uppercase tracking-[0.22em] text-primary">
-            Youngmedia
-          </p>
-          <h1 class="text-3xl font-semibold tracking-tight text-highlighted sm:text-4xl">
-            Bench
-          </h1>
-          <p class="mt-2 text-sm text-muted">
-            Projects available on this development server.
-          </p>
-        </div>
-        <UButton
-          color="neutral"
-          variant="outline"
-          :loading="status === 'pending'"
-          :disabled="Boolean(activeProject)"
-          @click="refresh()"
-        >
-          Refresh
-        </UButton>
-      </header>
+    <UContainer v-if="isDashboard" as="main" class="min-h-screen py-10">
+      <UPageHeader
+        headline="Youngmedia"
+        title="Bench"
+        description="Projects available on this development server."
+      >
+        <template #links>
+          <UButton
+            color="neutral"
+            variant="outline"
+            :loading="status === 'pending'"
+            :disabled="Boolean(activeProject)"
+            @click="refresh()"
+          >
+            Refresh
+          </UButton>
+        </template>
+      </UPageHeader>
 
       <UAlert
         v-if="error"
-        class="mb-6"
+        class="mt-8"
         color="error"
         variant="subtle"
         title="Could not load projects"
         :description="responseError(error)"
       />
 
-      <div v-if="status === 'pending' && !data" class="grid gap-4 md:grid-cols-2">
-        <USkeleton v-for="index in 4" :key="index" class="h-56 rounded-xl" />
-      </div>
+      <UPageGrid v-if="status === 'pending' && !data" class="mt-8">
+        <USkeleton v-for="index in 4" :key="index" class="h-56" />
+      </UPageGrid>
 
-      <UCard
+      <UEmpty
         v-else-if="data?.projects.length === 0"
-        class="py-12 text-center"
-        variant="subtle"
-      >
-        <h2 class="text-lg font-medium text-highlighted">
-          No Bench projects found
-        </h2>
-        <p class="mt-2 text-sm text-muted">
-          Add a bench.yml file to a direct subdirectory of the configured projects directory.
-        </p>
-      </UCard>
+        class="mt-8"
+        title="No Bench projects found"
+        description="Add a bench.yml file to a direct subdirectory of the configured projects directory."
+      />
 
-      <section v-else class="grid gap-4 md:grid-cols-2">
+      <UPageGrid v-else class="mt-8">
         <UCard
           v-for="project in data?.projects"
           :key="project.id"
-          variant="subtle"
-          :ui="{ body: 'flex h-full flex-col' }"
+          class="flex flex-col"
+          :ui="{ body: 'flex-1' }"
         >
-          <div class="mb-5 flex items-start justify-between gap-4">
-            <div class="min-w-0">
-              <h2 class="truncate text-lg font-semibold text-highlighted">
-                {{ project.name || project.id }}
-              </h2>
-              <p v-if="project.name && project.name !== project.id" class="truncate text-xs text-dimmed">
-                {{ project.id }}
-              </p>
+          <template #header>
+            <div class="flex items-start justify-between gap-4">
+              <div class="min-w-0">
+                <h2 class="truncate font-semibold">
+                  {{ project.name || project.id }}
+                </h2>
+                <p v-if="project.name && project.name !== project.id" class="truncate text-xs text-muted">
+                  {{ project.id }}
+                </p>
+              </div>
+              <UBadge :color="statePresentation[project.state].color" variant="subtle">
+                {{ statePresentation[project.state].label }}
+              </UBadge>
             </div>
-            <UBadge :color="statePresentation[project.state].color" variant="subtle">
-              {{ statePresentation[project.state].label }}
-            </UBadge>
-          </div>
+          </template>
 
-          <div class="mb-6 min-h-16 flex-1">
-            <ul v-if="project.routes.length" class="space-y-2">
-              <li v-for="route in project.routes" :key="route">
-                <a
-                  :href="route"
-                  target="_blank"
-                  rel="noreferrer"
-                  class="break-all text-sm text-primary hover:underline"
-                >
-                  {{ route }}
-                </a>
-              </li>
-            </ul>
-            <p v-else class="text-sm text-muted">
-              No valid routes.
-            </p>
-            <p v-if="project.error" class="mt-3 text-sm text-error">
-              {{ project.error }}
-            </p>
-          </div>
+          <ul v-if="project.routes.length" class="space-y-2">
+            <li v-for="route in project.routes" :key="route">
+              <ULink
+                :to="route"
+                external
+                target="_blank"
+                class="break-all text-sm"
+              >
+                {{ route }}
+              </ULink>
+            </li>
+          </ul>
+          <p v-else class="text-sm text-muted">
+            No valid routes.
+          </p>
+          <UAlert
+            v-if="project.error"
+            class="mt-4"
+            color="warning"
+            variant="subtle"
+            title="Project state is inconsistent"
+            :description="project.error"
+          />
 
-          <div class="flex gap-2 border-t border-default pt-4">
-            <UButton
-              :loading="activeProject === project.id"
-              :disabled="Boolean(activeProject) || project.state === 'invalid' || project.state === 'running'"
-              @click="run(project.id, 'up')"
-            >
-              Start
-            </UButton>
-            <UButton
-              color="error"
-              variant="soft"
-              :loading="activeProject === project.id"
-              :disabled="Boolean(activeProject) || project.state === 'invalid' || project.state === 'stopped'"
-              @click="run(project.id, 'down')"
-            >
-              Stop
-            </UButton>
-          </div>
+          <template #footer>
+            <div class="flex gap-2">
+              <UButton
+                :loading="activeProject === project.id"
+                :disabled="Boolean(activeProject) || project.state === 'invalid' || project.state === 'running'"
+                @click="run(project.id, 'up')"
+              >
+                Start
+              </UButton>
+              <UButton
+                color="error"
+                variant="soft"
+                :loading="activeProject === project.id"
+                :disabled="Boolean(activeProject) || project.state === 'invalid' || project.state === 'stopped'"
+                @click="run(project.id, 'down')"
+              >
+                Stop
+              </UButton>
+            </div>
+          </template>
         </UCard>
-      </section>
-    </main>
+      </UPageGrid>
+    </UContainer>
 
-    <main
+    <UContainer
       v-else
-      class="mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center px-4 py-10 sm:px-6"
+      as="main"
+      class="flex min-h-screen max-w-xl flex-col justify-center py-10"
     >
-      <a :href="managerOrigin" class="mb-6 w-fit text-xs font-semibold uppercase tracking-[0.22em] text-primary hover:underline">
+      <ULink :to="managerOrigin" external class="mb-6 w-fit text-sm font-medium">
         Youngmedia Bench
-      </a>
+      </ULink>
 
-      <USkeleton v-if="status === 'pending' && !data" class="h-72 rounded-xl" />
+      <USkeleton v-if="status === 'pending' && !data" class="h-72" />
 
-      <UCard v-else-if="error" variant="subtle">
-        <h1 class="text-2xl font-semibold tracking-tight text-highlighted">
-          Project status is unavailable
-        </h1>
-        <p class="mt-3 text-sm text-error">
-          {{ responseError(error) }}
-        </p>
-        <div class="mt-6 flex gap-2">
+      <UEmpty
+        v-else-if="error"
+        title="Project status is unavailable"
+        :description="responseError(error)"
+      >
+        <template #actions>
           <UButton :loading="status === 'pending'" @click="refresh()">
             Retry
           </UButton>
           <UButton :to="managerOrigin" color="neutral" variant="outline" external>
             Open Bench Manager
           </UButton>
-        </div>
-      </UCard>
+        </template>
+      </UEmpty>
 
-      <UCard v-else-if="routedProject" variant="subtle">
-        <div class="mb-6 flex items-start justify-between gap-4">
-          <div>
-            <p class="text-sm text-muted">
-              Project
-            </p>
-            <h1 class="mt-1 text-2xl font-semibold tracking-tight text-highlighted">
-              {{ routedProject.name || routedProject.id }}
-              {{ routedProject.state === "degraded" ? "needs attention" : "is not running" }}
-            </h1>
+      <UCard v-else-if="routedProject">
+        <template #header>
+          <div class="flex items-start justify-between gap-4">
+            <div class="min-w-0">
+              <p class="text-sm text-muted">
+                Project
+              </p>
+              <h1 class="mt-1 text-xl font-semibold">
+                {{ routedProject.name || routedProject.id }}
+                {{ routedProject.state === "degraded" ? "needs attention" : "is not running" }}
+              </h1>
+            </div>
+            <UBadge :color="statePresentation[routedProject.state].color" variant="subtle">
+              {{ statePresentation[routedProject.state].label }}
+            </UBadge>
           </div>
-          <UBadge :color="statePresentation[routedProject.state].color" variant="subtle">
-            {{ statePresentation[routedProject.state].label }}
-          </UBadge>
-        </div>
+        </template>
 
         <p class="text-sm text-muted">
           Start the project to continue to this address.
         </p>
         <UAlert
           v-if="routedProject.error"
-          class="mt-5"
+          class="mt-4"
           color="warning"
           variant="subtle"
           title="Project state is inconsistent"
           :description="routedProject.error"
         />
 
-        <div class="mt-7 flex flex-wrap gap-2 border-t border-default pt-5">
-          <UButton
-            :loading="activeProject === routedProject.id"
-            :disabled="Boolean(activeProject)"
-            @click="run(routedProject.id, 'up')"
-          >
-            {{ routedProject.state === "degraded" ? "Start again" : "Start project" }}
-          </UButton>
+        <template #footer>
+          <div class="flex flex-wrap gap-2">
+            <UButton
+              :loading="activeProject === routedProject.id"
+              :disabled="Boolean(activeProject)"
+              @click="run(routedProject.id, 'up')"
+            >
+              {{ routedProject.state === "degraded" ? "Start again" : "Start project" }}
+            </UButton>
+            <UButton :to="managerOrigin" color="neutral" variant="outline" external>
+              Open Bench Manager
+            </UButton>
+          </div>
+        </template>
+      </UCard>
+
+      <UEmpty
+        v-else
+        title="Unknown Bench project"
+        description="This hostname is not configured as a route for any project."
+      >
+        <template #leading>
+          <UBadge color="neutral" variant="subtle">
+            404
+          </UBadge>
+        </template>
+        <template #actions>
           <UButton :to="managerOrigin" color="neutral" variant="outline" external>
             Open Bench Manager
           </UButton>
-        </div>
-      </UCard>
-
-      <UCard v-else variant="subtle">
-        <p class="text-sm font-medium text-primary">
-          404
-        </p>
-        <h1 class="mt-2 text-2xl font-semibold tracking-tight text-highlighted">
-          Unknown Bench project
-        </h1>
-        <p class="mt-3 text-sm text-muted">
-          This hostname is not configured as a route for any project.
-        </p>
-        <UButton :to="managerOrigin" class="mt-7" color="neutral" variant="outline" external>
-          Open Bench Manager
-        </UButton>
-      </UCard>
-    </main>
+        </template>
+      </UEmpty>
+    </UContainer>
   </UApp>
 </template>
