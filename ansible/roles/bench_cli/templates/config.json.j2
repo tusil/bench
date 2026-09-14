@@ -1,0 +1,6 @@
+{
+  "domain": {{ caddy_bench_domain | to_json }},
+  "network": {{ caddy_network | to_json }},
+  "caddyContainer": {{ caddy_container | to_json }},
+  "generatedDirectory": {{ (caddy_directory + '/generated') | to_json }}
+}

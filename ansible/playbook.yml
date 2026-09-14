@@ -30,4 +30,5 @@
     - role: tailscale
     - role: docker
     - role: caddy
+    - role: bench_cli
     - role: projects

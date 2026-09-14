@@ -17,6 +17,7 @@ architekturách AMD64 a ARM64. Nainstaluje a nastaví:
 - Docker Engine a containerd z oficiálního Docker APT repozitáře,
 - Docker Compose plugin,
 - externí Docker network `bench-proxy` pro budoucí napojení projektů,
+- TypeScript CLI `bench` pro spouštění a HTTPS zpřístupnění projektů,
 - adresář `~/Sites` pro projekty.
 
 Tailscale poskytuje privátní síťovou cestu ke standardnímu OpenSSH i Caddy.
@@ -25,6 +26,53 @@ IPv4 adrese. Caddy je připojený do `bench-proxy`, takže na něj později půj
 napojit projektové kontejnery bez publikování jejich portů.
 Portless, firewall, exit node, subnet routing, zálohy, správa secrets, Bench
 Manager a projektové šablony zatím nejsou součástí repozitáře.
+
+## Integrace projektu
+
+V kořeni projektu si nechte vytvořit základní `bench.yml`:
+
+```bash
+bench init
+```
+
+Příkaz odvodí `name` z názvu aktuálního adresáře a existující `bench.yml`
+nepřepíše. Vygenerovanou službu a port upravte podle Compose projektu:
+
+```yaml
+name: operon
+
+routes:
+  - service: frontend
+    port: 3000
+
+  - domain: api-operon.bench.example.dev
+    service: backend
+    port: 3333
+```
+
+Potom lze projekt spustit a zastavit:
+
+```bash
+bench up
+bench down
+```
+
+Výchozí příkazy jsou `docker compose up -d` a `docker compose down`. Projekt
+s vlastními skripty může nastavit všechny potřebné příkazy:
+
+```yaml
+commands:
+  compose: docker compose -f compose.dev.yml --profile dev
+  up: npm run docker:dev:up
+  down: npm run docker:dev:down
+```
+
+`commands.compose` musí ukazovat na stejný Compose projekt jako vlastní
+`up`/`down`, protože přes něj Bench ověřuje služby a hledá kontejnery.
+
+Route domény musí být přímo pod `bench.example.dev`, protože TLS certifikát
+je vystavený pro `*.bench.example.dev`. Použijte proto například
+`api-operon.bench.example.dev`, ne `api.operon.bench.example.dev`.
 
 ## Požadavky
 
@@ -136,11 +184,13 @@ nepotřebuje; změna `TS_HOSTNAME` aktualizuje jeho Tailscale hostname.
 │   │   └── hosts.yml
 │   ├── roles/
 │   │   ├── base/
+│   │   ├── bench_cli/
 │   │   ├── caddy/
 │   │   ├── docker/
 │   │   ├── projects/
 │   │   └── tailscale/
 │   └── playbook.yml
+├── cli/
 ├── .env.example
 ├── .gitignore
 ├── AGENTS.md
@@ -163,6 +213,7 @@ docker network inspect bench-proxy
 docker ps --filter name=bench-caddy
 docker exec bench-caddy caddy version
 docker exec bench-caddy caddy list-modules | grep '^dns.providers.duckdns$'
+bench --version
 test -d "$HOME/Sites"
 ```
 

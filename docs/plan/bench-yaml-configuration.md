@@ -30,6 +30,10 @@ Integrace s Benchem bude řešena pouze přes:
 bench.yml
 ```
 
+Základní soubor lze vytvořit příkazem `bench init`. Název projektu odvodí
+z aktuálního adresáře, vytvoří výchozí route `app:3000` k následné úpravě a
+existující `bench.yml` nikdy nepřepíše.
+
 Bench připojí příslušný běžící kontejner do vlastní Docker network dodatečně pomocí `docker network connect`.
 
 ## Příklad projektu
@@ -48,11 +52,16 @@ Příklad `bench.yml`:
 ```yaml
 name: operon
 
+commands:
+  compose: docker compose -f compose.dev.yml --profile dev
+  up: npm run docker:dev:up
+  down: npm run docker:dev:down
+
 routes:
   - service: frontend
     port: 3000
 
-  - domain: api.operon.bench.example.dev
+  - domain: api-operon.bench.example.dev
     service: backend
     port: 3333
 ```
@@ -70,6 +79,25 @@ operon.bench.example.dev
 ```
 
 Explicitní `domain` má přednost.
+
+Doména musí mít právě jeden label před `bench.example.dev`, aby ji pokryl
+wildcard certifikát `*.bench.example.dev`. Další route proto používají plochý
+tvar jako `api-operon.bench.example.dev`; vnořený tvar
+`api.operon.bench.example.dev` není povolený.
+
+Sekce `commands` je volitelná a platí pro celý projekt. Výchozí hodnoty jsou:
+
+```yaml
+commands:
+  compose: docker compose
+  up: docker compose up -d
+  down: docker compose down
+```
+
+Vlastní `up` a `down` musí být uvedeny společně. `compose` slouží pro příkazy
+`config --services` a `ps -q <service>` a musí označovat stejný Compose projekt,
+který spouští vlastní `up`. Příkazy se spouštějí přes `/bin/sh -c` v kořeni
+projektu.
 
 ## Docker networking
 
@@ -166,7 +194,7 @@ handle @route_operon_0 {
     reverse_proxy operon-frontend:3000
 }
 
-@route_operon_1 host api.operon.bench.example.dev
+@route_operon_1 host api-operon.bench.example.dev
 handle @route_operon_1 {
     reverse_proxy operon-backend:3333
 }
@@ -209,11 +237,7 @@ Postup:
 
 1. najdi `bench.yml`,
 2. načti a validuj konfiguraci,
-3. spusť:
-
-```bash
-docker compose up -d
-```
+3. spusť nakonfigurovaný příkaz `commands.up`,
 
 4. pro každou route:
 
@@ -232,7 +256,7 @@ Project operon started.
 
 Routes:
   https://operon.bench.example.dev
-  https://api.operon.bench.example.dev
+  https://api-operon.bench.example.dev
 ```
 
 Implementuj také:
@@ -245,11 +269,7 @@ Ten má:
 
 1. odstranit Caddy fragment projektu,
 2. validovat výslednou konfiguraci a reloadnout Caddy uvnitř Compose služby,
-3. spustit:
-
-```bash
-docker compose down
-```
+3. spustit nakonfigurovaný příkaz `commands.down`.
 
 Není potřeba explicitně odpojovat kontejnery z `bench-proxy`, protože po odstranění kontejnerů jejich network membership zanikne.
 
@@ -259,9 +279,12 @@ Minimálně validuj:
 
 * `name` je povinné,
 * `routes` je neprázdné pole,
+* `commands.compose` je neprázdný string, pokud je uveden,
+* vlastní `commands.up` a `commands.down` jsou neprázdné stringy a musí být uvedeny společně,
 * každá route má `service`,
 * každá route má validní TCP port,
 * doména je string, pokud je uvedena,
+* doména má právě jeden label před základní Bench doménou,
 * nesmí vzniknout dvě stejné domény v rámci jednoho projektu,
 * doména nesmí kolidovat s fragmentem jiného projektu v `generated`.
 

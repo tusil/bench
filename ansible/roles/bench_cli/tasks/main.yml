@@ -1,0 +1,143 @@
+---
+- name: Validate the Node architecture
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['architecture'] in node_architecture_map
+    fail_msg: Node.js is supported only on AMD64 and ARM64.
+    quiet: true
+
+- name: Install the Node archive prerequisite
+  ansible.builtin.apt:
+    name: xz-utils
+    state: present
+
+- name: Download Node.js
+  ansible.builtin.get_url:
+    url: "https://nodejs.org/dist/v{{ node_version }}/{{ node_archive }}"
+    dest: "/tmp/{{ node_archive }}"
+    checksum: "sha256:{{ node_checksum_map[ansible_facts['architecture']] }}"
+    mode: "0644"
+
+- name: Install Node.js
+  ansible.builtin.unarchive:
+    src: "/tmp/{{ node_archive }}"
+    dest: /opt
+    remote_src: true
+    creates: "{{ node_directory }}/bin/node"
+
+- name: Select the provisioned Node.js version
+  ansible.builtin.file:
+    src: "{{ node_directory }}"
+    dest: /opt/node
+    state: link
+    force: true
+
+- name: Install Node.js commands
+  ansible.builtin.file:
+    src: "/opt/node/bin/{{ item }}"
+    dest: "/usr/local/bin/{{ item }}"
+    state: link
+    force: true
+  loop:
+    - node
+    - npm
+
+- name: Create the Bench CLI directory
+  ansible.builtin.file:
+    path: "{{ bench_cli_directory }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the Bench CLI package files
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../cli/{{ item }}"
+    dest: "{{ bench_cli_directory }}/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - package.json
+    - package-lock.json
+    - tsconfig.json
+  register: bench_cli_package_files
+
+- name: Install the Bench CLI source
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../cli/src/"
+    dest: "{{ bench_cli_directory }}/src/"
+    owner: root
+    group: root
+    mode: "0644"
+    directory_mode: "0755"
+  register: bench_cli_source
+
+- name: Check the Bench CLI dependencies
+  ansible.builtin.stat:
+    path: "{{ bench_cli_directory }}/node_modules/.package-lock.json"
+  register: bench_cli_dependencies
+
+- name: Install the Bench CLI dependencies
+  ansible.builtin.command:
+    argv:
+      - /opt/node/bin/npm
+      - ci
+  args:
+    chdir: "{{ bench_cli_directory }}"
+  environment:
+    PATH: "/opt/node/bin:{{ ansible_facts['env']['PATH'] }}"
+  register: bench_cli_npm_install
+  when: bench_cli_package_files.changed or not bench_cli_dependencies.stat.exists
+
+- name: Check the compiled Bench CLI
+  ansible.builtin.stat:
+    path: "{{ bench_cli_directory }}/dist/src/cli.js"
+  register: bench_cli_compiled
+
+- name: Compile the Bench CLI
+  ansible.builtin.command:
+    argv:
+      - /opt/node/bin/npm
+      - run
+      - build
+  args:
+    chdir: "{{ bench_cli_directory }}"
+  environment:
+    PATH: "/opt/node/bin:{{ ansible_facts['env']['PATH'] }}"
+  when: >-
+    bench_cli_source.changed
+    or bench_cli_package_files.changed
+    or bench_cli_npm_install.changed | default(false)
+    or not bench_cli_compiled.stat.exists
+
+- name: Make the Bench CLI executable
+  ansible.builtin.file:
+    path: "{{ bench_cli_directory }}/dist/src/cli.js"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the Bench command
+  ansible.builtin.file:
+    src: "{{ bench_cli_directory }}/dist/src/cli.js"
+    dest: /usr/local/bin/bench
+    state: link
+    force: true
+
+- name: Configure the Bench CLI
+  ansible.builtin.template:
+    src: config.json.j2
+    dest: "{{ bench_cli_system_config }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Verify the Bench CLI
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/bench
+      - --version
+  register: bench_cli_version
+  changed_when: false
+  failed_when: bench_cli_version.stdout != '0.1.0'
