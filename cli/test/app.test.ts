@@ -42,6 +42,7 @@ test("rolls back a new network connection and fragment after Caddy failure", () 
     network: "bench-proxy",
     caddyContainer: "bench-caddy",
     generatedDirectory,
+    projectsDirectory: "/srv",
   };
   const runner = new FailingCaddyRunner();
 
@@ -58,6 +59,7 @@ test("restores the route when the configured down command fails", () => {
     network: "bench-proxy",
     caddyContainer: "bench-caddy",
     generatedDirectory,
+    projectsDirectory: "/srv",
   };
   const path = join(generatedDirectory, "demo.caddy");
   const original = renderFragment(project);

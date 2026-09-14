@@ -57,6 +57,10 @@
       owner: "{{ bench_user }}"
       group: "{{ bench_primary_group }}"
       mode: "0755"
+    - path: /run/bench
+      owner: "{{ bench_user }}"
+      group: "{{ bench_primary_group }}"
+      mode: "0700"
   loop_control:
     label: "{{ item.path }}"
 

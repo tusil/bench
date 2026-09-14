@@ -6,6 +6,7 @@ import { BenchError } from "./errors.js";
 import { loadSystemConfig } from "./config.js";
 import { initializeProject } from "./init.js";
 import { loadProjectConfig } from "./project.js";
+import { listProjects } from "./projects.js";
 import { SystemCommandRunner } from "./runner.js";
 
 const version = "0.1.0";
@@ -15,12 +16,13 @@ Commands:
   init     Create bench.yml in the current directory
   up       Start and expose the current project
   down     Remove routes and stop the current project
+  list --json List projects and their state as JSON
   --help   Show this help
   --version Show the version`;
 
 export function main(args = process.argv.slice(2)): number {
   const command = args[0];
-  if (args.length !== 1 || !command) {
+  if (!command) {
     console.error(help);
     return 2;
   }
@@ -29,8 +31,31 @@ export function main(args = process.argv.slice(2)): number {
     return 0;
   }
   if (command === "--version" || command === "-v") {
+    if (args.length !== 1) {
+      console.error(help);
+      return 2;
+    }
     console.log(version);
     return 0;
+  }
+  if (command === "list") {
+    if (args.length !== 2 || args[1] !== "--json") {
+      console.error("Usage: bench list --json");
+      return 2;
+    }
+    try {
+      const system = loadSystemConfig();
+      const runner = new SystemCommandRunner();
+      console.log(JSON.stringify({ projects: listProjects(system, runner) }));
+      return 0;
+    } catch (error) {
+      console.error(error instanceof BenchError || error instanceof Error ? error.message : String(error));
+      return 1;
+    }
+  }
+  if (args.length !== 1) {
+    console.error(help);
+    return 2;
   }
   if (command !== "init" && command !== "up" && command !== "down") {
     console.error(`Unknown command: ${command}\n\n${help}`);

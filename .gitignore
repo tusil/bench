@@ -1,3 +1,6 @@
 .env
 cli/dist/
 cli/node_modules/
+manager/.nuxt/
+manager/.output/
+manager/node_modules/

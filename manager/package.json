@@ -1,0 +1,27 @@
+{
+  "name": "@youngmedia/bench-manager",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "postinstall": "nuxt prepare",
+    "test": "vitest run",
+    "typecheck": "nuxt typecheck"
+  },
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "dependencies": {
+    "@nuxt/ui": "4.11.1",
+    "nuxt": "4.5.2"
+  },
+  "devDependencies": {
+    "@nuxt/test-utils": "4.3.2",
+    "@types/node": "24.13.4",
+    "typescript": "5.9.3",
+    "vitest": "5.0.0",
+    "vue-tsc": "3.3.11"
+  }
+}

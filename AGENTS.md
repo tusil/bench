@@ -2,8 +2,7 @@
 
 Bench is a reproducible headless Ubuntu development server.
 
-This repository contains only the infrastructure and provisioning of the Bench server.
-The Bench web administration application lives in a separate repository.
+This repository contains the infrastructure, provisioning, CLI and web administration application for the Bench server.
 
 ## Principles
 
@@ -16,24 +15,24 @@ The Bench web administration application lives in a separate repository.
 - Do not manually configure services when the same configuration can live in this repository.
 - Do not add functionality unless it is currently required.
 
-## Initial scope
+## Current scope
 
-The first milestone includes only:
+The repository includes:
 
-- base Ubuntu packages
-- Git
-- Docker Engine
-- Docker Compose
-- project directory structure
+- base Ubuntu packages and Git
+- Docker Engine and Docker Compose
+- Tailscale connectivity
+- Caddy with private wildcard HTTPS routing
+- the `bench` project lifecycle CLI
+- the Nuxt Bench Manager
+- the configurable project directory
 
 Do not add yet:
 
-- Caddy
-- Tailscale
 - Portless
+- firewall management
 - backups
 - secrets management
-- Bench Manager
 - project templates
 
 ## Git

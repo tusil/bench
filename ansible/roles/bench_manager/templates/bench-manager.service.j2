@@ -1,0 +1,24 @@
+[Unit]
+Description=Bench Manager
+After=docker.service network-online.target
+Wants=docker.service network-online.target
+
+[Service]
+Type=simple
+User={{ bench_user }}
+Group={{ bench_primary_group }}
+SupplementaryGroups=docker
+WorkingDirectory={{ bench_manager_directory }}
+Environment=NODE_ENV=production
+Environment=NITRO_UNIX_SOCKET={{ bench_manager_socket }}
+Environment=NUXT_MANAGER_ORIGIN=https://{{ caddy_bench_domain }}
+Environment=BENCH_CLI_PATH=/usr/local/bin/bench
+UMask=0077
+ExecStartPre=/usr/bin/rm -f {{ bench_manager_socket }}
+ExecStart=/opt/node/bin/node {{ bench_manager_directory }}/.output/server/index.mjs
+Restart=on-failure
+RestartSec=2
+KillMode=control-group
+
+[Install]
+WantedBy=multi-user.target

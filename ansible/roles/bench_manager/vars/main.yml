@@ -1,0 +1,5 @@
+---
+bench_manager_directory: /opt/bench/manager
+bench_manager_runtime_directory: /run/bench
+bench_manager_socket: "{{ bench_manager_runtime_directory }}/manager.sock"
+bench_manager_service: bench-manager

@@ -27,5 +27,6 @@ export function loadSystemConfig(path = "/etc/bench/config.json"): SystemConfig 
     network: requiredString(config.network, "network"),
     caddyContainer: requiredString(config.caddyContainer, "caddyContainer"),
     generatedDirectory: requiredString(config.generatedDirectory, "generatedDirectory"),
+    projectsDirectory: requiredString(config.projectsDirectory, "projectsDirectory"),
   };
 }

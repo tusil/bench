@@ -1,7 +1,7 @@
 ---
 - name: Create the projects directory
   ansible.builtin.file:
-    path: "{{ bench_home }}/Sites"
+    path: "{{ bench_projects_directory }}"
     state: directory
     owner: "{{ bench_user }}"
     group: "{{ bench_primary_group }}"

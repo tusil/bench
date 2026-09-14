@@ -19,6 +19,7 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./generated:/etc/bench/caddy/generated:ro
+      - /run/bench:/run/bench:ro
       - caddy_data:/data
       - caddy_config:/config
     networks:

@@ -2,17 +2,27 @@
 	auto_https disable_redirects
 }
 
-http://*.{{ caddy_bench_domain }} {
-	redir https://{host}{uri} permanent
-}
-
-https://*.{{ caddy_bench_domain }} {
+(bench_tls) {
 	tls {
 		dns duckdns {env.DUCKDNS_API_TOKEN} {
 			override_domain {{ caddy_duckdns_domain }}
 		}
 	}
+}
 
+http://{{ caddy_bench_domain }}, http://*.{{ caddy_bench_domain }} {
+	redir https://{host}{uri} permanent
+}
+
+https://{{ caddy_bench_domain }} {
+	import bench_tls
+	reverse_proxy unix//run/bench/manager.sock {
+		header_up Host {host}
+	}
+}
+
+https://*.{{ caddy_bench_domain }} {
+	import bench_tls
 	route {
 		import /etc/bench/caddy/generated/*.caddy
 		respond "Bench Caddy is running"

@@ -3,6 +3,7 @@ export interface SystemConfig {
   network: string;
   caddyContainer: string;
   generatedDirectory: string;
+  projectsDirectory: string;
 }
 
 export interface ProjectRoute {
@@ -30,4 +31,15 @@ export interface CommandRunner {
   captureShell(command: string, cwd: string): string;
   interactiveShell(command: string, cwd: string): void;
   interactive(command: string, args: string[], cwd?: string): void;
+}
+
+export type ProjectState = "running" | "stopped" | "degraded" | "invalid";
+
+export interface ProjectSummary {
+  id: string;
+  root: string;
+  name?: string;
+  routes: string[];
+  state: ProjectState;
+  error?: string;
 }

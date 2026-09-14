@@ -21,7 +21,7 @@ export function renderFragment(project: ProjectConfig): string {
   return `${lines.join("\n")}\n`;
 }
 
-function owner(text: string): string | undefined {
+export function fragmentOwner(text: string): string | undefined {
   const match = text.match(/^# bench-project-root: (.+)$/m);
   if (!match?.[1]) return undefined;
   try {
@@ -61,7 +61,7 @@ export function assertFragmentAvailable(directory: string, project: ProjectConfi
 export function assertFragmentOwned(directory: string, project: ProjectConfig): void {
   const ownPath = fragmentPath(directory, project);
   const current = readFragment(ownPath);
-  if (current !== null && owner(current) !== project.root) {
+  if (current !== null && fragmentOwner(current) !== project.root) {
     throw new BenchError(`Project name ${project.name} is already owned by another directory`);
   }
 }

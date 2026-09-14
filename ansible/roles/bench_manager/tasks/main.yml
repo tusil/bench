@@ -1,0 +1,114 @@
+---
+- name: Create the Bench Manager installation directory
+  ansible.builtin.file:
+    path: "{{ bench_manager_directory }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the Bench Manager package files
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../manager/{{ item }}"
+    dest: "{{ bench_manager_directory }}/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - package.json
+    - package-lock.json
+    - tsconfig.json
+    - nuxt.config.ts
+  register: bench_manager_package_files
+
+- name: Install the Bench Manager application source
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../manager/{{ item }}/"
+    dest: "{{ bench_manager_directory }}/{{ item }}/"
+    owner: root
+    group: root
+    mode: "0644"
+    directory_mode: "0755"
+  loop:
+    - app
+    - server
+    - shared
+  register: bench_manager_source
+
+- name: Check the Bench Manager dependencies
+  ansible.builtin.stat:
+    path: "{{ bench_manager_directory }}/node_modules/.package-lock.json"
+  register: bench_manager_dependencies
+
+- name: Install the Bench Manager dependencies
+  ansible.builtin.command:
+    argv:
+      - /opt/node/bin/npm
+      - ci
+  args:
+    chdir: "{{ bench_manager_directory }}"
+  environment:
+    PATH: "/opt/node/bin:{{ ansible_facts['env']['PATH'] }}"
+  register: bench_manager_npm_install
+  when: bench_manager_package_files.changed or not bench_manager_dependencies.stat.exists
+
+- name: Check the compiled Bench Manager
+  ansible.builtin.stat:
+    path: "{{ bench_manager_directory }}/.output/server/index.mjs"
+  register: bench_manager_compiled
+
+- name: Compile the Bench Manager
+  ansible.builtin.command:
+    argv:
+      - /opt/node/bin/npm
+      - run
+      - build
+  args:
+    chdir: "{{ bench_manager_directory }}"
+  environment:
+    PATH: "/opt/node/bin:{{ ansible_facts['env']['PATH'] }}"
+  register: bench_manager_build
+  when: >-
+    bench_manager_source.changed
+    or bench_manager_package_files.changed
+    or bench_manager_npm_install.changed | default(false)
+    or not bench_manager_compiled.stat.exists
+
+- name: Configure the Bench Manager runtime directory
+  ansible.builtin.template:
+    src: bench-manager.tmpfiles.j2
+    dest: /etc/tmpfiles.d/bench-manager.conf
+    owner: root
+    group: root
+    mode: "0644"
+  register: bench_manager_tmpfiles
+
+- name: Create the Bench Manager runtime directory
+  ansible.builtin.command:
+    argv:
+      - systemd-tmpfiles
+      - --create
+      - /etc/tmpfiles.d/bench-manager.conf
+  changed_when: bench_manager_tmpfiles.changed
+
+- name: Configure the Bench Manager service
+  ansible.builtin.template:
+    src: bench-manager.service.j2
+    dest: "/etc/systemd/system/{{ bench_manager_service }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  register: bench_manager_unit
+
+- name: Enable and start the Bench Manager
+  ansible.builtin.systemd_service:
+    name: "{{ bench_manager_service }}"
+    enabled: true
+    daemon_reload: "{{ bench_manager_unit.changed }}"
+    state: "{{ 'restarted' if (bench_manager_build.changed | default(false) or bench_manager_unit.changed) else 'started' }}"
+
+- name: Wait for the Bench Manager socket
+  ansible.builtin.wait_for:
+    path: "{{ bench_manager_socket }}"
+    state: present
+    timeout: 15

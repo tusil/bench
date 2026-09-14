@@ -6,6 +6,7 @@
 
   vars:
     bench_user: "{{ lookup('ansible.builtin.env', 'SUDO_USER') | default(lookup('ansible.builtin.env', 'USER'), true) }}"
+    bench_projects_relative_directory: "{{ lookup('ansible.builtin.env', 'BENCH_PROJECTS_DIR') | default('Projects', true) }}"
 
   pre_tasks:
     - name: Validate the invoking user
@@ -25,6 +26,21 @@
         bench_home: "{{ ansible_facts['getent_passwd'][bench_user][4] }}"
         bench_primary_group: "{{ ansible_facts['getent_passwd'][bench_user][2] }}"
 
+    - name: Validate the projects directory
+      ansible.builtin.assert:
+        that:
+          - bench_projects_relative_directory | length > 0
+          - not bench_projects_relative_directory.startswith('/')
+          - "'' not in bench_projects_relative_directory.split('/')"
+          - "'.' not in bench_projects_relative_directory.split('/')"
+          - "'..' not in bench_projects_relative_directory.split('/')"
+        fail_msg: BENCH_PROJECTS_DIR must be a path relative to the Bench user's home.
+        quiet: true
+
+    - name: Set the projects directory
+      ansible.builtin.set_fact:
+        bench_projects_directory: "{{ bench_home }}/{{ bench_projects_relative_directory }}"
+
   roles:
     - role: base
     - role: tailscale
@@ -32,3 +48,4 @@
     - role: caddy
     - role: bench_cli
     - role: projects
+    - role: bench_manager

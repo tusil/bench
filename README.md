@@ -1,8 +1,8 @@
 # Bench
 
 Bench je reprodukovatelný headless Ubuntu server pro vývoj webových projektů.
-Tento repozitář obsahuje pouze infrastrukturu a provisioning serveru; webová
-administrace bude žít v samostatném repozitáři.
+Repozitář obsahuje infrastrukturu, provisioning, CLI a webovou administraci
+serveru.
 
 ## Aktuální rozsah
 
@@ -18,14 +18,15 @@ architekturách AMD64 a ARM64. Nainstaluje a nastaví:
 - Docker Compose plugin,
 - externí Docker network `bench-proxy` pro budoucí napojení projektů,
 - TypeScript CLI `bench` pro spouštění a HTTPS zpřístupnění projektů,
-- adresář `~/Sites` pro projekty.
+- Nuxt Bench Manager pro přehled, spouštění a zastavování projektů,
+- výchozí adresář `~/Projects` pro projekty.
 
 Tailscale poskytuje privátní síťovou cestu ke standardnímu OpenSSH i Caddy.
 Tailscale SSH se nezapíná a Docker publikuje porty Caddy pouze na Tailscale
 IPv4 adrese. Caddy je připojený do `bench-proxy`, takže na něj později půjde
 napojit projektové kontejnery bez publikování jejich portů.
-Portless, firewall, exit node, subnet routing, zálohy, správa secrets, Bench
-Manager a projektové šablony zatím nejsou součástí repozitáře.
+Portless, firewall, exit node, subnet routing, zálohy, správa secrets a
+projektové šablony zatím nejsou součástí repozitáře.
 
 ## Integrace projektu
 
@@ -74,6 +75,14 @@ Route domény musí být přímo pod `bench.example.dev`, protože TLS certifik�
 je vystavený pro `*.bench.example.dev`. Použijte proto například
 `api-operon.bench.example.dev`, ne `api.operon.bench.example.dev`.
 
+## Bench Manager
+
+Manager je po provisioningu dostupný pouze z tailnetu na
+`https://bench.example.dev`. Zobrazuje přímé podadresáře nakonfigurovaného
+adresáře projektů, které obsahují `bench.yml`, jejich routy a stav. Projekty lze
+z rozhraní spustit a zastavit; konfigurace se nadále upravuje přímo v
+`bench.yml`.
+
 ## Požadavky
 
 - Ubuntu Server 24.04 nebo 26.04 LTS,
@@ -101,6 +110,7 @@ pro HTTPS:
 ```dotenv
 TS_HOSTNAME=bench-dev
 TS_AUTHKEY=tskey-auth-...
+BENCH_PROJECTS_DIR=Projects
 BENCH_DOMAIN=bench.example.dev
 DUCKDNS_DOMAIN=example-bench.duckdns.org
 DUCKDNS_API_TOKEN=00000000-0000-0000-0000-000000000000
@@ -108,7 +118,9 @@ DUCKDNS_API_TOKEN=00000000-0000-0000-0000-000000000000
 
 `TS_HOSTNAME` je povinný při každém spuštění. `TS_AUTHKEY` je potřeba pouze
 pro nový nebo odhlášený server a po úspěšném připojení jej lze z `.env`
-odstranit. `BENCH_DOMAIN` je základ wildcard domény. `DUCKDNS_DOMAIN` slouží
+odstranit. `BENCH_PROJECTS_DIR` je cesta relativní k home uživatele Benche a
+její výchozí hodnota je `Projects`. `BENCH_DOMAIN` je adresa Manageru a
+současně základ wildcard domény. `DUCKDNS_DOMAIN` slouží
 pouze jako delegovaný cíl ACME challenge a `DUCKDNS_API_TOKEN` dovoluje Caddy
 vytvořit potřebný TXT záznam. Soubor `.env` je ignorovaný Gitem a má syntaxi
 Bash přiřazení.
@@ -117,7 +129,7 @@ Hodnoty lze předat také přímo. Proměnné z prostředí mají přednost pře
 
 ```bash
 TS_HOSTNAME=bench-dev TS_AUTHKEY=tskey-auth-... \
-BENCH_DOMAIN=bench.example.dev \
+BENCH_PROJECTS_DIR=Projects BENCH_DOMAIN=bench.example.dev \
 DUCKDNS_DOMAIN=example-bench.duckdns.org \
 DUCKDNS_API_TOKEN=00000000-0000-0000-0000-000000000000 \
 ./bootstrap.sh
@@ -131,16 +143,17 @@ Zjistěte Tailscale IPv4 adresu serveru:
 tailscale ip -4
 ```
 
-Pro výchozí hodnoty z `.env.example` vytvořte u správce DNS dva záznamy:
+Pro výchozí hodnoty z `.env.example` vytvořte u správce DNS tři záznamy:
 
 ```text
+bench.example.dev                   A       <TAILSCALE_IPV4>
 *.bench.example.dev                 A       <TAILSCALE_IPV4>
 _acme-challenge.bench.example.dev   CNAME   example-bench.duckdns.org.
 ```
 
-První záznam směruje všechny projektové hostname na privátní adresu serveru.
-Druhý deleguje pouze ověření certifikátu. DuckDNS se nepoužívá pro směrování
-provozu a jeho IP adresa proto není pro Bench podstatná.
+První dva záznamy směrují Manager a všechny projektové hostname na privátní
+adresu serveru. Třetí deleguje pouze ověření certifikátu. DuckDNS se nepoužívá
+pro směrování provozu a jeho IP adresa proto není pro Bench podstatná.
 
 ## Instalace
 
@@ -167,7 +180,7 @@ set -a
 source .env
 set +a
 export ANSIBLE_CONFIG="$PWD/ansible.cfg"
-sudo --preserve-env=ANSIBLE_CONFIG,TS_HOSTNAME,TS_AUTHKEY,BENCH_DOMAIN,DUCKDNS_DOMAIN,DUCKDNS_API_TOKEN ansible-playbook \
+sudo --preserve-env=ANSIBLE_CONFIG,TS_HOSTNAME,TS_AUTHKEY,BENCH_PROJECTS_DIR,BENCH_DOMAIN,DUCKDNS_DOMAIN,DUCKDNS_API_TOKEN ansible-playbook \
   --inventory ansible/inventory/hosts.yml \
   ansible/playbook.yml
 ```
@@ -185,12 +198,14 @@ nepotřebuje; změna `TS_HOSTNAME` aktualizuje jeho Tailscale hostname.
 │   ├── roles/
 │   │   ├── base/
 │   │   ├── bench_cli/
+│   │   ├── bench_manager/
 │   │   ├── caddy/
 │   │   ├── docker/
 │   │   ├── projects/
 │   │   └── tailscale/
 │   └── playbook.yml
 ├── cli/
+├── manager/
 ├── .env.example
 ├── .gitignore
 ├── AGENTS.md
@@ -214,7 +229,10 @@ docker ps --filter name=bench-caddy
 docker exec bench-caddy caddy version
 docker exec bench-caddy caddy list-modules | grep '^dns.providers.duckdns$'
 bench --version
-test -d "$HOME/Sites"
+bench list --json
+systemctl is-active bench-manager
+test -S /run/bench/manager.sock
+test -d "$HOME/Projects"
 ```
 
 Z jiného zařízení připojeného ke stejnému tailnetu ověřte standardní SSH přes
@@ -227,8 +245,10 @@ ssh <user>@bench-dev
 HTTPS ověřte z libovolného zařízení připojeného ke stejnému tailnetu:
 
 ```bash
+curl https://bench.example.dev
 curl https://test.bench.example.dev
 ```
 
-Očekávaná odpověď je `Bench Caddy is running`. Dokud nebude přidán Portless,
+První požadavek otevře Bench Manager. Očekávaná odpověď druhého požadavku je
+`Bench Caddy is running`. Dokud nebude přidán Portless,
 vrací Caddy stejnou testovací odpověď pro všechny názvy pod wildcard doménou.
