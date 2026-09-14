@@ -53,6 +53,10 @@
       owner: root
       group: root
       mode: "0755"
+    - path: "{{ caddy_config_directory }}"
+      owner: root
+      group: root
+      mode: "0755"
     - path: "{{ caddy_directory }}/generated"
       owner: "{{ bench_user }}"
       group: "{{ bench_primary_group }}"
@@ -113,7 +117,7 @@
 - name: Configure Caddy
   ansible.builtin.template:
     src: Caddyfile.j2
-    dest: "{{ caddy_directory }}/Caddyfile"
+    dest: "{{ caddy_config_directory }}/Caddyfile"
     owner: root
     group: root
     mode: "0644"
@@ -296,3 +300,8 @@
       - "'caddy' in caddy_running_services.stdout_lines"
     fail_msg: The Caddy Compose service is not running.
     quiet: true
+
+- name: Remove the legacy standalone Caddyfile
+  ansible.builtin.file:
+    path: "{{ caddy_directory }}/Caddyfile"
+    state: absent

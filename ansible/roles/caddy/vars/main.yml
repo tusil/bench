@@ -5,6 +5,7 @@ caddy_image: "bench-caddy:{{ caddy_version }}-duckdns-{{ caddy_duckdns_version }
 caddy_container: bench-caddy
 caddy_compose_project: bench
 caddy_directory: /etc/bench/caddy
+caddy_config_directory: "{{ caddy_directory }}/config"
 caddy_network: bench-proxy
 
 caddy_bench_domain: "{{ lookup('ansible.builtin.env', 'BENCH_DOMAIN') }}"

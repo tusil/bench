@@ -17,7 +17,7 @@ services:
       - "{{ caddy_bind_address }}:443:443"
       - "{{ caddy_bind_address }}:443:443/udp"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./config:/etc/caddy:ro
       - ./generated:/etc/bench/caddy/generated:ro
       - /run/bench:/run/bench:ro
       - caddy_data:/data
