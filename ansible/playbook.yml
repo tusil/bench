@@ -43,6 +43,7 @@
 
   roles:
     - role: base
+    - role: codex_sandbox
     - role: tailscale
     - role: docker
     - role: caddy

@@ -1,0 +1,220 @@
+---
+- name: Install Codex sandbox packages
+  ansible.builtin.apt:
+    name:
+      - apparmor
+      - apparmor-profiles
+      - apparmor-utils
+      - bubblewrap
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Enable and start AppArmor
+  ansible.builtin.service:
+    name: apparmor
+    enabled: true
+    state: started
+
+- name: Read the maximum user namespace count
+  ansible.builtin.command:
+    argv:
+      - /sbin/sysctl
+      - -n
+      - user.max_user_namespaces
+  register: codex_sandbox_max_user_namespaces
+  changed_when: false
+
+- name: Validate user namespaces are available
+  ansible.builtin.assert:
+    that:
+      - codex_sandbox_max_user_namespaces.stdout | int > 0
+    fail_msg: user.max_user_namespaces must be greater than zero for the Codex sandbox.
+    quiet: true
+
+- name: Check for the unprivileged user namespace switch
+  ansible.builtin.stat:
+    path: /proc/sys/kernel/unprivileged_userns_clone
+  register: codex_sandbox_unprivileged_userns_switch
+
+- name: Read the unprivileged user namespace switch
+  ansible.builtin.command:
+    argv:
+      - /sbin/sysctl
+      - -n
+      - kernel.unprivileged_userns_clone
+  register: codex_sandbox_unprivileged_userns
+  changed_when: false
+  when: codex_sandbox_unprivileged_userns_switch.stat.exists
+
+- name: Validate unprivileged user namespaces are enabled
+  ansible.builtin.assert:
+    that:
+      - codex_sandbox_unprivileged_userns.stdout | int == 1
+    fail_msg: kernel.unprivileged_userns_clone must be enabled for the Codex sandbox.
+    quiet: true
+  when: codex_sandbox_unprivileged_userns_switch.stat.exists
+
+- name: Check for the AppArmor user namespace restriction
+  ansible.builtin.stat:
+    path: /proc/sys/kernel/apparmor_restrict_unprivileged_userns
+  register: codex_sandbox_apparmor_userns_switch
+
+- name: Read the AppArmor user namespace restriction
+  ansible.builtin.command:
+    argv:
+      - /sbin/sysctl
+      - -n
+      - kernel.apparmor_restrict_unprivileged_userns
+  register: codex_sandbox_apparmor_userns
+  changed_when: false
+  when: codex_sandbox_apparmor_userns_switch.stat.exists
+
+- name: Validate the AppArmor user namespace restriction stays enabled
+  ansible.builtin.assert:
+    that:
+      - codex_sandbox_apparmor_userns.stdout | int == 1
+    fail_msg: >-
+      kernel.apparmor_restrict_unprivileged_userns must remain enabled;
+      use the targeted Bubblewrap profile instead of disabling it globally.
+    quiet: true
+  when: codex_sandbox_apparmor_userns_switch.stat.exists
+
+- name: Test the Bubblewrap sandbox
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/bwrap
+      - --ro-bind
+      - /
+      - /
+      - --unshare-user
+      - --unshare-pid
+      - --unshare-net
+      - /usr/bin/true
+  become: true
+  become_user: "{{ bench_user }}"
+  register: codex_sandbox_initial_test
+  changed_when: false
+  failed_when: false
+
+- name: Repair the Bubblewrap AppArmor profile
+  when: codex_sandbox_initial_test.rc != 0
+  block:
+    - name: Check for the active Bubblewrap profile file
+      ansible.builtin.stat:
+        path: /etc/apparmor.d/bwrap-userns-restrict
+      register: codex_sandbox_active_profile
+
+    - name: Check for the packaged extra Bubblewrap profile
+      ansible.builtin.stat:
+        path: /usr/share/apparmor/extra-profiles/bwrap-userns-restrict
+      register: codex_sandbox_extra_profile
+      when: not codex_sandbox_active_profile.stat.exists
+
+    - name: Validate a distribution Bubblewrap profile is available
+      ansible.builtin.assert:
+        that:
+          - >-
+            codex_sandbox_active_profile.stat.exists
+            or (codex_sandbox_extra_profile.stat.exists | default(false))
+        fail_msg: Ubuntu did not provide the bwrap-userns-restrict AppArmor profile.
+        quiet: true
+
+    - name: Find AppArmor profiles attached directly to Bubblewrap
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/grep
+          - -RIlE
+          - '^[[:space:]]*profile[[:space:]]+[^[:space:]]+[[:space:]]+/usr/bin/bwrap([[:space:]]|$)'
+          - /etc/apparmor.d
+      register: codex_sandbox_attached_profiles
+      changed_when: false
+      failed_when: codex_sandbox_attached_profiles.rc not in [0, 1]
+
+    - name: Select conflicting Bubblewrap profiles
+      ansible.builtin.set_fact:
+        codex_sandbox_conflicting_profiles: >-
+          {{ codex_sandbox_attached_profiles.stdout_lines
+             | reject('equalto', '/etc/apparmor.d/bwrap-userns-restrict')
+             | list }}
+
+    - name: Reject conflicting Bubblewrap profiles
+      ansible.builtin.assert:
+        that:
+          - codex_sandbox_conflicting_profiles | length == 0
+        fail_msg: >-
+          Another AppArmor profile is attached directly to /usr/bin/bwrap:
+          {{ codex_sandbox_conflicting_profiles | join(', ') }}.
+          Resolve the conflict before provisioning Bench.
+        quiet: true
+
+    - name: Activate and verify the distribution Bubblewrap profile
+      block:
+        - name: Install the packaged extra Bubblewrap profile
+          ansible.builtin.copy:
+            src: /usr/share/apparmor/extra-profiles/bwrap-userns-restrict
+            dest: /etc/apparmor.d/bwrap-userns-restrict
+            remote_src: true
+            owner: root
+            group: root
+            mode: "0644"
+          register: codex_sandbox_profile_copy
+          when: not codex_sandbox_active_profile.stat.exists
+
+        - name: Load the Bubblewrap AppArmor profile
+          ansible.builtin.command:
+            argv:
+              - /usr/sbin/apparmor_parser
+              - -r
+              - -W
+              - /etc/apparmor.d/bwrap-userns-restrict
+          register: codex_sandbox_profile_load
+          changed_when: true
+
+        - name: Verify the Bubblewrap sandbox
+          ansible.builtin.command:
+            argv:
+              - /usr/bin/bwrap
+              - --ro-bind
+              - /
+              - /
+              - --unshare-user
+              - --unshare-pid
+              - --unshare-net
+              - /usr/bin/true
+          become: true
+          become_user: "{{ bench_user }}"
+          register: codex_sandbox_repaired_test
+          changed_when: false
+
+      rescue:
+        - name: Unload the newly installed Bubblewrap profile
+          ansible.builtin.command:
+            argv:
+              - /usr/sbin/apparmor_parser
+              - -R
+              - /etc/apparmor.d/bwrap-userns-restrict
+          changed_when: true
+          failed_when: false
+          when:
+            - codex_sandbox_profile_copy is defined
+            - codex_sandbox_profile_copy.changed
+
+        - name: Remove the newly installed Bubblewrap profile
+          ansible.builtin.file:
+            path: /etc/apparmor.d/bwrap-userns-restrict
+            state: absent
+          when:
+            - codex_sandbox_profile_copy is defined
+            - codex_sandbox_profile_copy.changed
+
+        - name: Report the Bubblewrap sandbox failure
+          ansible.builtin.fail:
+            msg: >-
+              Bubblewrap cannot create the Codex sandbox.
+              Initial error: {{ codex_sandbox_initial_test.stderr | default('unknown error', true) }}.
+              Profile error: {{
+                (codex_sandbox_repaired_test | default({})).stderr
+                | default((codex_sandbox_profile_load | default({})).stderr
+                | default('unknown error', true), true)
+              }}.

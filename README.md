@@ -11,6 +11,7 @@ architekturách AMD64 a ARM64. Nainstaluje a nastaví:
 
 - základní balíčky `ca-certificates` a `curl`,
 - Git,
+- Bubblewrap a cílený AppArmor profil pro Codex sandbox,
 - Tailscale a připojení serveru k existujícímu tailnetu,
 - Caddy kontejner s veřejně důvěryhodným wildcard certifikátem přes DuckDNS DNS challenge,
 - privátní HTTPS na Tailscale adrese a stavovou stránku pro vypnuté projekty,
@@ -190,6 +191,12 @@ lokální playbook. Ansible si při běhu vyžádá heslo pro `sudo`.
 Po dokončení se odhlaste a znovu přihlaste, aby se projevilo členství ve
 skupině `docker`.
 
+Provisioning také ověří, že běžný uživatel může vytvořit izolovaný Bubblewrap
+sandbox používaný Codexem. Globální AppArmor omezení pro unprivilegované user
+namespaces přitom zůstává zapnuté. Pokud je k `/usr/bin/bwrap` připojen jiný
+profil, playbook bezpečně skončí a existující bezpečnostní konfiguraci
+nepřepíše. Samotný Codex provisioning neinstaluje.
+
 ## Přímé spuštění Ansible
 
 Pokud už je Ansible nainstalovaný, lze provisioning spustit přímo:
@@ -219,6 +226,7 @@ nepotřebuje; změna `TS_HOSTNAME` aktualizuje jeho Tailscale hostname.
 │   │   ├── bench_cli/
 │   │   ├── bench_manager/
 │   │   ├── caddy/
+│   │   ├── codex_sandbox/
 │   │   ├── docker/
 │   │   ├── projects/
 │   │   └── tailscale/
@@ -239,6 +247,7 @@ Po novém přihlášení lze instalaci ověřit:
 
 ```bash
 git --version
+bwrap --ro-bind / / --unshare-user --unshare-pid --unshare-net true
 tailscale status
 docker --version
 docker compose version
