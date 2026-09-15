@@ -1,3 +1,7 @@
-import { projectAction } from "../../../utils/http";
+import { projectStart } from "../../../utils/http";
 
-export default defineEventHandler((event) => projectAction(event, "up"));
+export default defineEventHandler(async (event) => {
+  const result = await projectStart(event);
+  setResponseStatus(event, 202);
+  return result;
+});

@@ -71,6 +71,13 @@ commands:
 `commands.compose` musí ukazovat na stejný Compose projekt jako vlastní
 `up`/`down`, protože přes něj Bench ověřuje služby a hledá kontejnery.
 
+Logy všech služeb aktuálního Compose projektu lze vypsat jednorázově nebo
+průběžně:
+
+```bash
+bench logs --tail 200 --follow
+```
+
 Route domény musí být přímo pod `bench.example.dev`, protože TLS certifikát
 je vystavený pro `*.bench.example.dev`. Použijte proto například
 `api-operon.bench.example.dev`, ne `api.operon.bench.example.dev`.
@@ -80,10 +87,14 @@ je vystavený pro `*.bench.example.dev`. Použijte proto například
 Manager je po provisioningu dostupný pouze z tailnetu na
 `https://bench.example.dev`. Zobrazuje přímé podadresáře nakonfigurovaného
 adresáře projektů, které obsahují `bench.yml`, jejich routy a stav. Projekty lze
-z rozhraní spustit a zastavit; konfigurace se nadále upravuje přímo v
-`bench.yml`. URL vypnutého projektu zobrazí jeho stav a tlačítko pro spuštění.
-Po úspěšném spuštění se stejná URL automaticky načte z projektu. Neznámé
-subdomény zobrazí pouze stránku 404 s odkazem na Manager.
+z rozhraní spustit, zastavit a otevřít jejich logy na samostatné stránce.
+Při spuštění stránka živě ukazuje výstup `bench up` a po jeho úspěšném
+dokončení naváže runtime logy kontejnerů. Stejný průběh se zobrazí i při startu
+z URL vypnutého projektu. Při samostatném otevření logů stránka nejprve zobrazí
+posledních 200 řádků každého aktuálního kontejneru a potom výstup živě doplňuje.
+Logy se samostatně nearchivují, takže po odstranění kontejnerů příkazem
+`docker compose down` už nejsou dostupné. Konfigurace se nadále upravuje přímo
+v `bench.yml`. Neznámé subdomény zobrazí pouze stránku 404 s odkazem na Manager.
 
 ## Požadavky
 

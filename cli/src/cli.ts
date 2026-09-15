@@ -1,7 +1,7 @@
 #!/opt/node/bin/node
 
 import { resolve } from "node:path";
-import { down, up } from "./app.js";
+import { down, logs, up } from "./app.js";
 import { BenchError } from "./errors.js";
 import { loadSystemConfig } from "./config.js";
 import { initializeProject } from "./init.js";
@@ -16,6 +16,7 @@ Commands:
   init     Create bench.yml in the current directory
   up       Start and expose the current project
   down     Remove routes and stop the current project
+  logs     Show logs for the current project
   list --json List projects and their state as JSON
   --help   Show this help
   --version Show the version`;
@@ -47,6 +48,41 @@ export function main(args = process.argv.slice(2)): number {
       const system = loadSystemConfig();
       const runner = new SystemCommandRunner();
       console.log(JSON.stringify({ projects: listProjects(system, runner) }));
+      return 0;
+    } catch (error) {
+      console.error(error instanceof BenchError || error instanceof Error ? error.message : String(error));
+      return 1;
+    }
+  }
+  if (command === "logs") {
+    let tail = 200;
+    let follow = false;
+    const options = args.slice(1);
+    for (let index = 0; index < options.length; index += 1) {
+      const option = options[index];
+      if (option === "--follow") {
+        follow = true;
+        continue;
+      }
+      if (option === "--tail") {
+        const value = options[index + 1];
+        const parsed = value && /^\d+$/.test(value) ? Number(value) : Number.NaN;
+        if (!Number.isSafeInteger(parsed)) {
+          console.error("Usage: bench logs [--tail <lines>] [--follow]");
+          return 2;
+        }
+        tail = parsed;
+        index += 1;
+        continue;
+      }
+      console.error("Usage: bench logs [--tail <lines>] [--follow]");
+      return 2;
+    }
+
+    try {
+      const system = loadSystemConfig();
+      const project = loadProjectConfig(resolve(process.cwd()), system.domain);
+      logs(project, new SystemCommandRunner(), tail, follow);
       return 0;
     } catch (error) {
       console.error(error instanceof BenchError || error instanceof Error ? error.message : String(error));

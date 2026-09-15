@@ -25,7 +25,16 @@ export function mutationSource(
   }
 }
 
-function asHttpError(error: unknown): never {
+export function isManagerHost(host: string | undefined, managerOrigin: string): boolean {
+  if (!host) return false;
+  try {
+    return host.toLowerCase() === new URL(managerOrigin).host.toLowerCase();
+  } catch {
+    return false;
+  }
+}
+
+export function asHttpError(error: unknown): never {
   const managerError = error instanceof ManagerError
     ? error
     : new ManagerError(error instanceof Error ? error.message : String(error));
@@ -36,7 +45,7 @@ function asHttpError(error: unknown): never {
   });
 }
 
-export async function projectAction(event: H3Event, action: "up" | "down") {
+function projectMutationSource(event: H3Event): MutationSource {
   const config = useRuntimeConfig(event);
   const source = mutationSource(
     getHeader(event, "origin"),
@@ -47,6 +56,22 @@ export async function projectAction(event: H3Event, action: "up" | "down") {
   if (!source) {
     throw createError({ statusCode: 403, statusMessage: "Forbidden" });
   }
+  return source;
+}
+
+export async function projectStart(event: H3Event) {
+  const source = projectMutationSource(event);
+  await readBody(event);
+  const id = getRouterParam(event, "id");
+  try {
+    return await projectService.start(id || "", source.kind === "project" ? source.origin : undefined);
+  } catch (error) {
+    asHttpError(error);
+  }
+}
+
+export async function projectAction(event: H3Event, action: "up" | "down") {
+  const source = projectMutationSource(event);
   await readBody(event);
   const id = getRouterParam(event, "id");
   try {

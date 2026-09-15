@@ -89,3 +89,16 @@ export function down(
   }
   output(`Project ${project.name} stopped.`);
 }
+
+export function logs(
+  project: ProjectConfig,
+  runner: CommandRunner,
+  tail: number,
+  follow: boolean,
+): void {
+  const followFlag = follow ? " --follow" : "";
+  runner.interactiveShell(
+    `${project.commands.compose} logs --no-color --timestamps --tail ${tail}${followFlag}`,
+    project.root,
+  );
+}

@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { down, up } from "../src/app.js";
+import { down, logs, up } from "../src/app.js";
 import { renderFragment } from "../src/caddy.js";
 import { BenchError } from "../src/errors.js";
 import { parseProjectConfig } from "../src/project.js";
@@ -74,4 +74,19 @@ test("restores the route when the configured down command fails", () => {
 
   assert.throws(() => down(project, system, runner, () => undefined), /Down failed/);
   assert.equal(readFileSync(path, "utf8"), original);
+});
+
+test("streams timestamped Compose logs with the requested history", () => {
+  const project = parseProjectConfig(
+    "name: demo\ncommands:\n  compose: docker compose -f compose.dev.yml --profile dev\nroutes:\n  - { service: web, port: 3000 }\n",
+    "/srv/demo",
+    "bench.test",
+  );
+  const runner = new FailingCaddyRunner();
+
+  logs(project, runner, 200, true);
+
+  assert.deepEqual(runner.calls, [
+    "docker compose -f compose.dev.yml --profile dev logs --no-color --timestamps --tail 200 --follow",
+  ]);
 });
