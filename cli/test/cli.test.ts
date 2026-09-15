@@ -13,3 +13,12 @@ test("rejects an invalid logs tail before loading project configuration", () => 
   assert.equal(result.status, 2);
   assert.match(result.stderr, /Usage: bench logs/);
 });
+
+test("rejects invalid stats arguments before loading system configuration", () => {
+  const result = spawnSync(process.execPath, [cliPath, "stats"], {
+    encoding: "utf8",
+  });
+
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /Usage: bench stats --json/);
+});

@@ -88,6 +88,12 @@ Manager je po provisioningu dostupný pouze z tailnetu na
 `https://bench.example.dev`. Zobrazuje přímé podadresáře nakonfigurovaného
 adresáře projektů, které obsahují `bench.yml`, jejich routy a stav. Projekty lze
 z rozhraní spustit, zastavit a otevřít jejich logy na samostatné stránce.
+
+Dashboard každých pět sekund obnovuje aktuální využití CPU, RAM, swapu a
+filesystemu s projekty. U jednotlivých projektů zobrazuje normalizovaný podíl
+CPU celého serveru a součet RAM všech jejich běžících Compose kontejnerů. Disk
+se zjišťuje pouze metadata dotazem na filesystem; adresáře ani Docker volumes se
+rekurzivně neprocházejí.
 Při spuštění stránka živě ukazuje výstup `bench up` a po jeho úspěšném
 dokončení naváže runtime logy kontejnerů. Stejný průběh se zobrazí i při startu
 z URL vypnutého projektu. Při samostatném otevření logů stránka nejprve zobrazí
@@ -244,6 +250,7 @@ docker exec bench-caddy caddy list-modules | grep '^dns.providers.duckdns$'
 bench --version
 bench list --json
 systemctl is-active bench-manager
+bench stats --json
 test -S /run/bench/manager.sock
 test -d "$HOME/Projects"
 ```

@@ -6,6 +6,7 @@ import {
   ManagerError,
   createProjectService,
   parseProjectList,
+  parseResources,
   type BenchExecutor,
   type BenchProcessSpawner,
 } from "../server/utils/bench";
@@ -19,6 +20,23 @@ const response = JSON.stringify({
     name: "demo",
     routes: ["https://demo.bench.test"],
     state: "stopped",
+  }],
+});
+
+const resourcesResponse = JSON.stringify({
+  sampledAt: "2026-09-15T12:00:00.000Z",
+  system: {
+    cpu: { usagePercent: 12.5, logicalCores: 8 },
+    memory: { usedBytes: 4_000, totalBytes: 8_000 },
+    swap: { usedBytes: 0, totalBytes: 0 },
+    disk: { usedBytes: 60_000, totalBytes: 100_000 },
+  },
+  projects: [{
+    id: "demo-dir",
+    available: true,
+    cpuPercent: 2.5,
+    memoryUsedBytes: 512,
+    containerCount: 2,
   }],
 });
 
@@ -51,6 +69,30 @@ describe("project list", () => {
 
   it("rejects malformed CLI output", () => {
     expect(() => parseProjectList("{}")).toThrow(ManagerError);
+  });
+});
+
+describe("resources", () => {
+  it("requests and validates resource usage from the CLI", async () => {
+    const execute = vi.fn<BenchExecutor>(async () => resourcesResponse);
+    const service = createProjectService(execute);
+
+    await expect(service.resources()).resolves.toEqual(JSON.parse(resourcesResponse));
+    expect(execute).toHaveBeenCalledWith(["stats", "--json"]);
+  });
+
+  it("rejects malformed capacities, percentages, and duplicate projects", () => {
+    const malformedCapacity = JSON.parse(resourcesResponse);
+    malformedCapacity.system.memory.usedBytes = malformedCapacity.system.memory.totalBytes + 1;
+    expect(() => parseResources(JSON.stringify(malformedCapacity))).toThrow(ManagerError);
+
+    const malformedPercentage = JSON.parse(resourcesResponse);
+    malformedPercentage.projects[0].cpuPercent = 101;
+    expect(() => parseResources(JSON.stringify(malformedPercentage))).toThrow(ManagerError);
+
+    const duplicate = JSON.parse(resourcesResponse);
+    duplicate.projects.push(duplicate.projects[0]);
+    expect(() => parseResources(JSON.stringify(duplicate))).toThrow(/duplicate projects/);
   });
 });
 

@@ -4,6 +4,11 @@ import { fragmentOwner, fragmentPath, readFragment } from "./caddy.js";
 import { loadProjectConfig } from "./project.js";
 import type { CommandRunner, ProjectConfig, ProjectSummary, ProjectState, SystemConfig } from "./types.js";
 
+export interface ProjectDirectory {
+  id: string;
+  root: string;
+}
+
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -41,32 +46,36 @@ function projectState(
   }
 }
 
-export function listProjects(system: SystemConfig, runner: CommandRunner): ProjectSummary[] {
-  const entries = readdirSync(system.projectsDirectory, { withFileTypes: true })
+export function discoverProjectDirectories(system: SystemConfig): ProjectDirectory[] {
+  return readdirSync(system.projectsDirectory, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
-    .sort((left, right) => left.name.localeCompare(right.name));
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .flatMap((entry): ProjectDirectory[] => {
+      const root = join(system.projectsDirectory, entry.name);
+      return existsSync(join(root, "bench.yml")) ? [{ id: entry.name, root }] : [];
+    });
+}
 
-  return entries.flatMap((entry): ProjectSummary[] => {
-    const root = join(system.projectsDirectory, entry.name);
-    if (!existsSync(join(root, "bench.yml"))) return [];
+export function listProjects(system: SystemConfig, runner: CommandRunner): ProjectSummary[] {
+  return discoverProjectDirectories(system).map(({ id, root }): ProjectSummary => {
     try {
       const project = loadProjectConfig(root, system.domain);
       const status = projectState(project, system, runner);
-      return [{
-        id: entry.name,
+      return {
+        id,
         root,
         name: project.name,
         routes: project.routes.map((route) => `https://${route.domain}`),
         ...status,
-      }];
+      };
     } catch (error) {
-      return [{
-        id: entry.name,
+      return {
+        id,
         root,
         routes: [],
         state: "invalid",
         error: message(error),
-      }];
+      };
     }
   });
 }

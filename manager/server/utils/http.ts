@@ -88,3 +88,11 @@ export async function projectList() {
     asHttpError(error);
   }
 }
+
+export async function resourceList() {
+  try {
+    return await projectService.resources();
+  } catch (error) {
+    asHttpError(error);
+  }
+}

@@ -5,6 +5,7 @@ import type {
   ProjectsResponse,
   StartOperationResponse,
 } from "~~/shared/types/projects";
+import type { CapacityUsage, ProjectResourceUsage, ResourcesResponse } from "~~/shared/types/resources";
 import {
   findProjectByHostname,
   hostnameFromUrl,
@@ -18,9 +19,20 @@ const { data, error, refresh, status } = await useFetch<ProjectsResponse>("/api/
 
 const managerOrigin = config.public.managerOrigin;
 const isDashboard = requestUrl.hostname.toLowerCase() === hostnameFromUrl(managerOrigin);
+const {
+  data: resources,
+  error: resourcesError,
+  refresh: refreshResources,
+  status: resourcesStatus,
+} = await useFetch<ResourcesResponse>("/api/resources", { immediate: isDashboard });
+const dashboardRefreshing = ref(false);
+
 const routedProject = computed(() => data.value
   ? findProjectByHostname(data.value.projects, requestUrl.hostname)
   : undefined);
+const projectResources = computed(() => new Map(
+  resources.value?.projects.map((project) => [project.id, project]) || [],
+));
 
 if (import.meta.server && !isDashboard && data.value && !routedProject.value) {
   const event = useRequestEvent();
@@ -50,6 +62,68 @@ function conciseError(value: unknown): string {
   return message.length > 240 ? `${message.slice(0, 237)}...` : message;
 }
 
+const numberFormatter = new Intl.NumberFormat("en", { maximumFractionDigits: 1 });
+
+function formatPercent(value: number): string {
+  return `${numberFormatter.format(value)}%`;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
+  const unit = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${numberFormatter.format(bytes / 1024 ** unit)} ${units[unit]}`;
+}
+
+function capacityPercent(capacity: CapacityUsage): number {
+  return capacity.totalBytes === 0 ? 0 : Math.min(100, capacity.usedBytes / capacity.totalBytes * 100);
+}
+
+function projectUsage(id: string): ProjectResourceUsage | undefined {
+  return projectResources.value.get(id);
+}
+
+function projectCpu(id: string): string {
+  const usage = projectUsage(id);
+  return usage?.available ? formatPercent(usage.cpuPercent) : resourcesStatus.value === "pending" ? "Loading..." : "Unavailable";
+}
+
+function projectMemory(id: string): string {
+  const usage = projectUsage(id);
+  return usage?.available ? formatBytes(usage.memoryUsedBytes) : resourcesStatus.value === "pending" ? "Loading..." : "Unavailable";
+}
+
+async function refreshDashboard(): Promise<void> {
+  dashboardRefreshing.value = true;
+  try {
+    await Promise.all([refresh(), refreshResources({ dedupe: "defer" })]);
+  } finally {
+    dashboardRefreshing.value = false;
+  }
+}
+
+async function pollResources(): Promise<void> {
+  if (!isDashboard || document.hidden || resourcesStatus.value === "pending") return;
+  await refreshResources({ dedupe: "defer" });
+}
+
+function handleVisibilityChange(): void {
+  if (!document.hidden) void pollResources();
+}
+
+let resourcesTimer: ReturnType<typeof setInterval> | undefined;
+
+onMounted(() => {
+  if (!isDashboard) return;
+  resourcesTimer = setInterval(() => void pollResources(), 5_000);
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+});
+
+onBeforeUnmount(() => {
+  if (resourcesTimer) clearInterval(resourcesTimer);
+  document.removeEventListener("visibilitychange", handleVisibilityChange);
+});
+
 async function start(id: string) {
   activeProject.value = id;
   try {
@@ -78,7 +152,7 @@ async function stop(id: string) {
   } catch (cause) {
     toast.add({ title: "Could not stop project", description: conciseError(cause), color: "error" });
   } finally {
-    if (isDashboard) await refresh();
+    if (isDashboard) await refreshDashboard();
     activeProject.value = undefined;
   }
 }
@@ -96,9 +170,9 @@ async function stop(id: string) {
           <UButton
             color="neutral"
             variant="outline"
-            :loading="status === 'pending'"
+            :loading="dashboardRefreshing"
             :disabled="Boolean(activeProject)"
-            @click="refresh()"
+            @click="refreshDashboard"
           >
             Refresh
           </UButton>
@@ -113,6 +187,96 @@ async function stop(id: string) {
         title="Could not load projects"
         :description="responseError(error)"
       />
+
+      <UAlert
+        v-if="resourcesError"
+        class="mt-4"
+        color="error"
+        variant="subtle"
+        title="Could not load system resources"
+        :description="responseError(resourcesError)"
+      />
+
+      <UPageGrid v-if="resourcesStatus === 'pending' && !resources" class="mt-8">
+        <USkeleton v-for="index in 3" :key="index" class="h-44" />
+      </UPageGrid>
+
+      <UPageGrid v-else-if="resources" class="mt-8">
+        <UCard>
+          <p class="text-sm text-muted">
+            CPU
+          </p>
+          <div class="mt-2 flex items-end justify-between gap-4">
+            <p class="text-2xl font-semibold">
+              {{ formatPercent(resources.system.cpu.usagePercent) }}
+            </p>
+            <p class="text-sm text-muted">
+              {{ resources.system.cpu.logicalCores }} logical cores
+            </p>
+          </div>
+          <UProgress
+            class="mt-4"
+            size="sm"
+            :model-value="resources.system.cpu.usagePercent"
+          />
+        </UCard>
+
+        <UCard>
+          <p class="text-sm text-muted">
+            Memory
+          </p>
+          <div class="mt-2 flex items-baseline justify-between gap-4">
+            <p class="font-semibold">
+              RAM
+            </p>
+            <p class="text-sm">
+              {{ formatBytes(resources.system.memory.usedBytes) }} /
+              {{ formatBytes(resources.system.memory.totalBytes) }}
+            </p>
+          </div>
+          <UProgress
+            class="mt-2"
+            size="sm"
+            :model-value="capacityPercent(resources.system.memory)"
+          />
+          <div class="mt-4 flex items-baseline justify-between gap-4">
+            <p class="font-semibold">
+              Swap
+            </p>
+            <p v-if="resources.system.swap.totalBytes" class="text-sm">
+              {{ formatBytes(resources.system.swap.usedBytes) }} /
+              {{ formatBytes(resources.system.swap.totalBytes) }}
+            </p>
+            <p v-else class="text-sm text-muted">
+              Not configured
+            </p>
+          </div>
+          <UProgress
+            v-if="resources.system.swap.totalBytes"
+            class="mt-2"
+            size="sm"
+            :model-value="capacityPercent(resources.system.swap)"
+          />
+        </UCard>
+
+        <UCard>
+          <p class="text-sm text-muted">
+            Projects disk
+          </p>
+          <p class="mt-2 text-2xl font-semibold">
+            {{ formatPercent(capacityPercent(resources.system.disk)) }}
+          </p>
+          <UProgress
+            class="mt-4"
+            size="sm"
+            :model-value="capacityPercent(resources.system.disk)"
+          />
+          <p class="mt-3 text-sm text-muted">
+            {{ formatBytes(resources.system.disk.usedBytes) }} /
+            {{ formatBytes(resources.system.disk.totalBytes) }}
+          </p>
+        </UCard>
+      </UPageGrid>
 
       <UPageGrid v-if="status === 'pending' && !data" class="mt-8">
         <USkeleton v-for="index in 4" :key="index" class="h-56" />
@@ -171,6 +335,24 @@ async function stop(id: string) {
             title="Project state is inconsistent"
             :description="project.error"
           />
+          <dl class="mt-5 grid grid-cols-2 gap-4 border-t border-default pt-4">
+            <div>
+              <dt class="text-xs text-muted">
+                CPU
+              </dt>
+              <dd class="mt-1 text-sm font-medium">
+                {{ projectCpu(project.id) }}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-xs text-muted">
+                RAM
+              </dt>
+              <dd class="mt-1 text-sm font-medium">
+                {{ projectMemory(project.id) }}
+              </dd>
+            </div>
+          </dl>
 
           <template #footer>
             <div class="flex flex-wrap gap-2">

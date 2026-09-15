@@ -7,6 +7,7 @@ import { loadSystemConfig } from "./config.js";
 import { initializeProject } from "./init.js";
 import { loadProjectConfig } from "./project.js";
 import { listProjects } from "./projects.js";
+import { collectResources } from "./resources.js";
 import { SystemCommandRunner } from "./runner.js";
 
 const version = "0.1.0";
@@ -18,6 +19,7 @@ Commands:
   down     Remove routes and stop the current project
   logs     Show logs for the current project
   list --json List projects and their state as JSON
+  stats --json Show server and project resource usage as JSON
   --help   Show this help
   --version Show the version`;
 
@@ -48,6 +50,21 @@ export function main(args = process.argv.slice(2)): number {
       const system = loadSystemConfig();
       const runner = new SystemCommandRunner();
       console.log(JSON.stringify({ projects: listProjects(system, runner) }));
+      return 0;
+    } catch (error) {
+      console.error(error instanceof BenchError || error instanceof Error ? error.message : String(error));
+      return 1;
+    }
+  }
+  if (command === "stats") {
+    if (args.length !== 2 || args[1] !== "--json") {
+      console.error("Usage: bench stats --json");
+      return 2;
+    }
+    try {
+      const system = loadSystemConfig();
+      const runner = new SystemCommandRunner();
+      console.log(JSON.stringify(collectResources(system, runner)));
       return 0;
     } catch (error) {
       console.error(error instanceof BenchError || error instanceof Error ? error.message : String(error));

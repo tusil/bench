@@ -8,6 +8,7 @@ import type {
   ProjectsResponse,
   StartOperationResponse,
 } from "~~/shared/types/projects";
+import type { CapacityUsage, ProjectResourceUsage, ResourcesResponse } from "~~/shared/types/resources";
 import { ProjectOperationRegistry } from "./operations";
 
 interface CliProject extends ProjectSummary {
@@ -67,6 +68,95 @@ export function parseProjectList(output: string): CliProject[] {
     throw new ManagerError("bench list returned an invalid response");
   }
   return ((value as { projects: unknown[] }).projects).map(parseProject);
+}
+
+function safeNonNegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function percentage(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 100;
+}
+
+function parseCapacity(value: unknown, name: string): CapacityUsage {
+  if (typeof value !== "object" || value === null) {
+    throw new ManagerError(`bench stats returned invalid ${name} usage`);
+  }
+  const capacity = value as Record<string, unknown>;
+  if (
+    !safeNonNegativeInteger(capacity.usedBytes)
+    || !safeNonNegativeInteger(capacity.totalBytes)
+    || capacity.usedBytes > capacity.totalBytes
+  ) {
+    throw new ManagerError(`bench stats returned invalid ${name} usage`);
+  }
+  return { usedBytes: capacity.usedBytes, totalBytes: capacity.totalBytes };
+}
+
+function parseProjectResources(value: unknown): ProjectResourceUsage {
+  if (typeof value !== "object" || value === null) {
+    throw new ManagerError("bench stats returned invalid project usage");
+  }
+  const project = value as Record<string, unknown>;
+  if (typeof project.id !== "string" || typeof project.available !== "boolean") {
+    throw new ManagerError("bench stats returned invalid project usage");
+  }
+  if (!project.available) return { id: project.id, available: false };
+  if (
+    !percentage(project.cpuPercent)
+    || !safeNonNegativeInteger(project.memoryUsedBytes)
+    || !safeNonNegativeInteger(project.containerCount)
+  ) {
+    throw new ManagerError("bench stats returned invalid project usage");
+  }
+  return {
+    id: project.id,
+    available: true,
+    cpuPercent: project.cpuPercent,
+    memoryUsedBytes: project.memoryUsedBytes,
+    containerCount: project.containerCount,
+  };
+}
+
+export function parseResources(output: string): ResourcesResponse {
+  let value: unknown;
+  try {
+    value = JSON.parse(output);
+  } catch {
+    throw new ManagerError("bench stats returned invalid JSON");
+  }
+  if (typeof value !== "object" || value === null) {
+    throw new ManagerError("bench stats returned an invalid response");
+  }
+  const response = value as Record<string, unknown>;
+  const system = response.system as Record<string, unknown> | undefined;
+  const cpu = system?.cpu as Record<string, unknown> | undefined;
+  if (
+    typeof response.sampledAt !== "string"
+    || !Number.isFinite(Date.parse(response.sampledAt))
+    || !system
+    || !cpu
+    || !percentage(cpu.usagePercent)
+    || !safeNonNegativeInteger(cpu.logicalCores)
+    || cpu.logicalCores < 1
+    || !Array.isArray(response.projects)
+  ) {
+    throw new ManagerError("bench stats returned an invalid response");
+  }
+  const projects = response.projects.map(parseProjectResources);
+  if (new Set(projects.map((project) => project.id)).size !== projects.length) {
+    throw new ManagerError("bench stats returned duplicate projects");
+  }
+  return {
+    sampledAt: response.sampledAt,
+    system: {
+      cpu: { usagePercent: cpu.usagePercent, logicalCores: cpu.logicalCores },
+      memory: parseCapacity(system.memory, "memory"),
+      swap: parseCapacity(system.swap, "swap"),
+      disk: parseCapacity(system.disk, "disk"),
+    },
+    projects,
+  };
 }
 
 export const executeBench: BenchExecutor = (args, cwd) => new Promise((resolve, reject) => {
@@ -137,6 +227,10 @@ export function createProjectService(
     async list(): Promise<ProjectsResponse> {
       const projects = (await rawProjects()).map(({ root: _root, ...project }) => project);
       return { projects };
+    },
+
+    async resources(): Promise<ResourcesResponse> {
+      return parseResources(await execute(["stats", "--json"]));
     },
 
     async action(id: string, action: "up" | "down", routeOrigin?: string): Promise<ActionResponse> {
