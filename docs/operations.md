@@ -6,6 +6,10 @@ Manager běží jako systemd služba `bench-manager` a přes Unix socket jej
 zpřístupňuje Caddy. Dostupný je pouze z tailnetu na HTTPS adrese nakonfigurované
 v `BENCH_DOMAIN`.
 
+Caddy běží v Dockeru. Služba `bench-caddy` při startu systému počká na Tailscale
+a znovu vytvoří Caddy kontejner, aby obnovila jeho síť a porty. Certifikáty
+zůstávají v Docker volume.
+
 Dashboard zobrazuje přímé podadresáře projektového adresáře s platným nebo
 chybným `bench.yml`, jejich routy a stav. Projekty lze spouštět, zastavovat a
 otevírat jejich logy.
@@ -47,6 +51,7 @@ Potom ověřte Caddy, CLI a Manager:
 
 ```bash
 docker ps --filter name=bench-caddy
+systemctl is-active bench-caddy
 docker exec bench-caddy caddy version
 docker exec bench-caddy caddy list-modules | grep '^dns.providers.duckdns$'
 bench --version
@@ -86,6 +91,7 @@ očekávanému HTTP 404 skončí s nenulovým návratovým kódem.
 | `/opt/bench/manager/` | Nainstalovaný build Manageru |
 | `/run/bench/manager.sock` | Unix socket Manageru |
 | `bench-caddy` | Stabilní název Caddy kontejneru |
+| `bench-caddy.service` | Obnovení Caddy kontejneru po startu systému |
 | `bench-manager.service` | Webová administrační služba |
 
 ## Struktura repozitáře

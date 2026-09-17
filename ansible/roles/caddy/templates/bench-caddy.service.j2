@@ -1,0 +1,17 @@
+[Unit]
+Description=Restore Bench Caddy after boot
+Requires=docker.service
+Wants=tailscaled.service
+After=docker.service tailscaled.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=/usr/bin/tailscale wait --timeout=120s
+ExecStart=/usr/bin/docker compose --project-name {{ caddy_compose_project }} --file {{ caddy_directory }}/compose.yml up --detach --force-recreate --no-build --remove-orphans
+Restart=on-failure
+RestartSec=10s
+TimeoutStartSec=180s
+
+[Install]
+WantedBy=multi-user.target

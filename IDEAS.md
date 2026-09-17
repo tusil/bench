@@ -1,0 +1,2 @@
+- zjednodusit otevirani vscode, nejaka alternativa code . z wsl ... mozna si udelame nejake bench rozsireni do vscode?
+- nejake aliasy pro praci s tmux nad projekty? pro kazdy budu potrebovat cmd a codex

@@ -278,6 +278,22 @@
     - caddy_configuration.changed
     - "'caddy' in caddy_running_services_before_update.stdout_lines"
 
+- name: Configure the Caddy boot service
+  ansible.builtin.template:
+    src: bench-caddy.service.j2
+    dest: /etc/systemd/system/bench-caddy.service
+    owner: root
+    group: root
+    mode: "0644"
+  register: caddy_boot_unit
+
+- name: Enable and start the Caddy boot service
+  ansible.builtin.systemd_service:
+    name: bench-caddy
+    enabled: true
+    daemon_reload: "{{ caddy_boot_unit.changed }}"
+    state: started
+
 - name: Read running Caddy Compose services after the update
   ansible.builtin.command:
     argv:
