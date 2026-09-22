@@ -12,6 +12,11 @@ export interface ProjectsResponse {
   projects: ProjectSummary[];
 }
 
+export interface ProjectDetailResponse {
+  project: ProjectSummary;
+  vscodeUri?: string;
+}
+
 export interface ActionResponse {
   message: string;
 }

@@ -61,10 +61,13 @@ export function listProjects(system: SystemConfig, runner: CommandRunner): Proje
     try {
       const project = loadProjectConfig(root, system.domain);
       const status = projectState(project, system, runner);
+      const workspaces = project.workspace ? [] : readdirSync(root, { withFileTypes: true })
+        .filter((entry) => entry.isFile() && entry.name.endsWith(".code-workspace"));
       return {
         id,
         root,
         name: project.name,
+        workspace: project.workspace ?? (workspaces.length === 1 ? workspaces[0]?.name : undefined),
         routes: project.routes.map((route) => `https://${route.domain}`),
         ...status,
       };

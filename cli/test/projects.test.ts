@@ -60,3 +60,37 @@ test("discovers direct project directories and reports their state", () => {
   ]);
   assert.deepEqual(projects[2]?.routes, ["https://demo.bench.test"]);
 });
+
+test("prefers configured workspace and auto-detects only one root workspace", () => {
+  const root = mkdtempSync(join(tmpdir(), "bench-workspaces-test-"));
+  const projectsDirectory = join(root, "Projects");
+  const generatedDirectory = join(root, "generated");
+  mkdirSync(projectsDirectory);
+  mkdirSync(generatedDirectory);
+  const config = "name: demo\nroutes:\n  - { service: web, port: 3000 }\n";
+
+  for (const id of ["manual", "single", "multiple", "none"]) {
+    mkdirSync(join(projectsDirectory, id));
+    writeFileSync(join(projectsDirectory, id, "bench.yml"), id === "manual"
+      ? `${config}workspace: .vscode/missing.code-workspace\n`
+      : config);
+  }
+  writeFileSync(join(projectsDirectory, "manual", "root.code-workspace"), "{}");
+  writeFileSync(join(projectsDirectory, "single", "one.code-workspace"), "{}");
+  writeFileSync(join(projectsDirectory, "multiple", "one.code-workspace"), "{}");
+  writeFileSync(join(projectsDirectory, "multiple", "two.code-workspace"), "{}");
+
+  const projects = listProjects({
+    domain: "bench.test",
+    network: "bench-proxy",
+    caddyContainer: "bench-caddy",
+    generatedDirectory,
+    projectsDirectory,
+  }, new StatusRunner());
+  assert.deepEqual(projects.map(({ id, workspace }) => ({ id, workspace })), [
+    { id: "manual", workspace: ".vscode/missing.code-workspace" },
+    { id: "multiple", workspace: undefined },
+    { id: "none", workspace: undefined },
+    { id: "single", workspace: "one.code-workspace" },
+  ]);
+});

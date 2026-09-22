@@ -10,6 +10,7 @@
 
   pre_tasks:
     - name: Validate the invoking user
+      tags: always
       ansible.builtin.assert:
         that:
           - bench_user | length > 0
@@ -17,16 +18,19 @@
         fail_msg: Run the playbook as a regular user, not as root.
 
     - name: Read the invoking user's account
+      tags: always
       ansible.builtin.getent:
         database: passwd
         key: "{{ bench_user }}"
 
     - name: Set the invoking user's home and primary group
+      tags: always
       ansible.builtin.set_fact:
         bench_home: "{{ ansible_facts['getent_passwd'][bench_user][4] }}"
         bench_primary_group: "{{ ansible_facts['getent_passwd'][bench_user][2] }}"
 
     - name: Validate the projects directory
+      tags: always
       ansible.builtin.assert:
         that:
           - bench_projects_relative_directory | length > 0
@@ -38,6 +42,7 @@
         quiet: true
 
     - name: Set the projects directory
+      tags: always
       ansible.builtin.set_fact:
         bench_projects_directory: "{{ bench_home }}/{{ bench_projects_relative_directory }}"
 
@@ -48,5 +53,6 @@
     - role: docker
     - role: caddy
     - role: bench_cli
+      tags: bench_cli
     - role: projects
     - role: bench_manager

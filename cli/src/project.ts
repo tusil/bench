@@ -38,6 +38,21 @@ function commands(value: unknown): ProjectCommands {
   };
 }
 
+function workspace(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (
+    typeof value !== "string"
+    || !value.endsWith(".code-workspace")
+    || value.startsWith("/")
+    || value.includes("\\")
+    || value.includes("\0")
+    || value.split("/").some((part) => part === "" || part === "." || part === "..")
+  ) {
+    throw new BenchError("workspace must be a relative .code-workspace path within the project");
+  }
+  return value;
+}
+
 export function dockerAlias(project: string, service: string): string {
   const serviceSlug = service.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/-+/g, "-");
   return `${project}-${serviceSlug}`.replace(/-+$/g, "");
@@ -71,6 +86,9 @@ export function parseProjectConfig(text: string, root: string, baseDomain: strin
     if (!Number.isInteger(route.port) || (route.port as number) < 1 || (route.port as number) > 65535) {
       throw new BenchError("Port must be between 1 and 65535");
     }
+    if (route.preserveHost !== undefined && typeof route.preserveHost !== "boolean") {
+      throw new BenchError(`routes[${index}].preserveHost must be a boolean`);
+    }
     const domain = route.domain === undefined
       ? `${name}.${normalizedBase}`
       : typeof route.domain === "string"
@@ -93,10 +111,16 @@ export function parseProjectConfig(text: string, root: string, baseDomain: strin
       throw new BenchError(`Services ${previousService} and ${route.service} produce the same Docker alias`);
     }
     aliases.set(alias, route.service);
-    return { service: route.service, port: route.port as number, domain, alias };
+    return {
+      service: route.service,
+      port: route.port as number,
+      domain,
+      alias,
+      preserveHost: route.preserveHost ?? true,
+    };
   });
 
-  return { name, root, routes, commands: commands(raw.commands) };
+  return { name, root, routes, commands: commands(raw.commands), workspace: workspace(raw.workspace) };
 }
 
 export function loadProjectConfig(root: string, baseDomain: string): ProjectConfig {

@@ -10,11 +10,18 @@ export function fragmentPath(directory: string, project: ProjectConfig): string 
 export function renderFragment(project: ProjectConfig): string {
   const lines = [`# bench-project-root: ${JSON.stringify(project.root)}`];
   project.routes.forEach((route, index) => {
+    const proxy = route.preserveHost
+      ? [`\treverse_proxy ${route.alias}:${route.port}`]
+      : [
+          `\treverse_proxy ${route.alias}:${route.port} {`,
+          "\t\theader_up Host localhost",
+          "\t}",
+        ];
     lines.push(
       "",
       `@route_${project.name.replaceAll("-", "_")}_${index} host ${route.domain}`,
       `handle @route_${project.name.replaceAll("-", "_")}_${index} {`,
-      `\treverse_proxy ${route.alias}:${route.port}`,
+      ...proxy,
       "}",
     );
   });

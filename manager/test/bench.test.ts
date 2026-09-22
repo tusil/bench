@@ -12,6 +12,7 @@ import {
 } from "../server/utils/bench";
 import { isManagerHost, mutationSource } from "../server/utils/http";
 import { findProjectByHostname } from "../shared/utils/projects";
+import { vscodeUri } from "../server/utils/vscode";
 
 const response = JSON.stringify({
   projects: [{
@@ -69,6 +70,42 @@ describe("project list", () => {
 
   it("rejects malformed CLI output", () => {
     expect(() => parseProjectList("{}")).toThrow(ManagerError);
+  });
+
+  it("returns an editor link only in project detail", async () => {
+    const withWorkspace = JSON.stringify({ projects: [{
+      ...JSON.parse(response).projects[0],
+      workspace: ".vscode/dev.code-workspace",
+    }] });
+    const service = createProjectService(async () => withWorkspace);
+
+    expect(await service.list()).toEqual({
+      projects: [{
+        id: "demo-dir",
+        name: "demo",
+        routes: ["https://demo.bench.test"],
+        state: "stopped",
+      }],
+    });
+    expect(await service.detail("demo-dir", "user", "bench-dev")).toEqual({
+      project: {
+        id: "demo-dir",
+        name: "demo",
+        routes: ["https://demo.bench.test"],
+        state: "stopped",
+      },
+      vscodeUri: "vscode://vscode-remote/ssh-remote+user@bench-dev/home/user/Projects/demo-dir/.vscode/dev.code-workspace",
+    });
+    expect((await service.detail("demo-dir", "", "")).vscodeUri).toBeUndefined();
+  });
+});
+
+describe("VS Code links", () => {
+  it("encodes path segments and opens the folder when no workspace is selected", () => {
+    expect(vscodeUri("a user", "bench-dev", "/home/a user/Projects/demo #1"))
+      .toBe("vscode://vscode-remote/ssh-remote+a%20user@bench-dev/home/a%20user/Projects/demo%20%231/");
+    expect(vscodeUri("user", "bench-dev", "/home/user/demo", "dev #1.code-workspace"))
+      .toBe("vscode://vscode-remote/ssh-remote+user@bench-dev/home/user/demo/dev%20%231.code-workspace");
   });
 });
 

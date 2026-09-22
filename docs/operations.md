@@ -33,6 +33,26 @@ přímo v `bench.yml`.
 Požadavek na route vypnutého projektu zobrazí možnost projekt spustit. Neznámá
 subdoména vrátí stránku 404 s odkazem na Manager.
 
+## Cílené nasazení CLI
+
+Pokud se změnilo pouze Bench CLI, lze nasadit jeho Ansible roli bez změn
+ostatních služeb. Načtěte stejné prostředí jako při plném provisioningu a
+spusťte playbook s tagem `bench_cli`:
+
+```bash
+set -a
+source .env
+set +a
+export ANSIBLE_CONFIG="$PWD/ansible.cfg"
+sudo --preserve-env=ANSIBLE_CONFIG,TS_HOSTNAME,TS_AUTHKEY,BENCH_PROJECTS_DIR,BENCH_DOMAIN,DUCKDNS_DOMAIN,DUCKDNS_API_TOKEN ansible-playbook \
+  --inventory ansible/inventory/hosts.yml \
+  --tags bench_cli \
+  ansible/playbook.yml
+```
+
+Role zkopíruje aktuální CLI zdroje, podle potřeby je zkompiluje a ponechá
+`/usr/local/bin/bench` napojený na spravovaný build v `/opt/bench/cli`.
+
 ## Ověření instalace
 
 Po novém přihlášení ověřte systémové komponenty:

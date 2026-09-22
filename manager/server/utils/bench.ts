@@ -2,6 +2,7 @@ import { execFile, spawn } from "node:child_process";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import type {
   ActionResponse,
+  ProjectDetailResponse,
   ProjectOperationEvent,
   ProjectState,
   ProjectSummary,
@@ -10,9 +11,11 @@ import type {
 } from "~~/shared/types/projects";
 import type { CapacityUsage, ProjectResourceUsage, ResourcesResponse } from "~~/shared/types/resources";
 import { ProjectOperationRegistry } from "./operations";
+import { vscodeUri } from "./vscode";
 
 interface CliProject extends ProjectSummary {
   root: string;
+  workspace?: string;
 }
 
 export type BenchExecutor = (args: string[], cwd?: string) => Promise<string>;
@@ -40,6 +43,14 @@ function parseProject(value: unknown): CliProject {
     typeof project.id !== "string"
     || typeof project.root !== "string"
     || (project.name !== undefined && typeof project.name !== "string")
+    || (project.workspace !== undefined && (
+      typeof project.workspace !== "string"
+      || !project.workspace.endsWith(".code-workspace")
+      || project.workspace.startsWith("/")
+      || project.workspace.includes("\\")
+      || project.workspace.includes("\0")
+      || project.workspace.split("/").some((part: string) => part === "" || part === "." || part === "..")
+    ))
     || !Array.isArray(project.routes)
     || !project.routes.every((route) => typeof route === "string")
     || !isState(project.state)
@@ -51,6 +62,7 @@ function parseProject(value: unknown): CliProject {
     id: project.id,
     root: project.root,
     name: project.name,
+    workspace: project.workspace as string | undefined,
     routes: project.routes,
     state: project.state,
     error: project.error,
@@ -225,8 +237,16 @@ export function createProjectService(
 
   return {
     async list(): Promise<ProjectsResponse> {
-      const projects = (await rawProjects()).map(({ root: _root, ...project }) => project);
+      const projects = (await rawProjects()).map(({ root: _root, workspace: _workspace, ...project }) => project);
       return { projects };
+    },
+
+    async detail(id: string, sshUser: string, sshHost: string): Promise<ProjectDetailResponse> {
+      const { root, workspace, ...project } = await findProject(id);
+      return {
+        project,
+        vscodeUri: sshUser && sshHost ? vscodeUri(sshUser, sshHost, root, workspace) : undefined,
+      };
     },
 
     async resources(): Promise<ResourcesResponse> {

@@ -7,6 +7,8 @@ export default defineNuxtConfig({
     preset: "node-server",
   },
   runtimeConfig: {
+    sshUser: "",
+    sshHost: "",
     public: {
       managerOrigin: "http://localhost:3000",
     },

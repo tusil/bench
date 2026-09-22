@@ -11,6 +11,7 @@ export interface ProjectRoute {
   port: number;
   domain: string;
   alias: string;
+  preserveHost: boolean;
 }
 
 export interface ProjectCommands {
@@ -24,6 +25,7 @@ export interface ProjectConfig {
   root: string;
   routes: ProjectRoute[];
   commands: ProjectCommands;
+  workspace?: string;
 }
 
 export interface CommandRunner {
@@ -39,6 +41,7 @@ export interface ProjectSummary {
   id: string;
   root: string;
   name?: string;
+  workspace?: string;
   routes: string[];
   state: ProjectState;
   error?: string;

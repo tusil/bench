@@ -35,13 +35,28 @@ písmenem nebo číslicí a uvnitř může obsahovat pomlčky.
 Název se používá pro výchozí doménu, Docker aliasy a název generovaného Caddy
 fragmentu. Všechny projekty proto musí mít unikátní `name`.
 
+## VS Code workspace
+
+Detail projektu v Bench Manageru nabízí otevření přes VS Code Remote SSH.
+Volitelným polem `workspace` v `bench.yml` lze zvolit soubor workspace:
+
+```yaml
+workspace: .vscode/dev.code-workspace
+```
+
+Cesta musí být relativní vůči kořeni projektu, zůstat uvnitř něj a končit na
+`.code-workspace`. Bench neověřuje, zda soubor existuje. Pokud pole chybí,
+Bench automaticky použije jediný `.code-workspace` soubor v kořeni projektu.
+Při žádném nebo více takových souborech otevře VS Code složku projektu.
+
 ## Routy
 
 `routes` je neprázdné pole. Každá route obsahuje:
 
 - `service` — název existující Compose služby,
 - `port` — port služby v kontejneru v rozsahu 1–65535,
-- `domain` — volitelný hostname.
+- `domain` — volitelný hostname,
+- `preserveHost` — volitelný boolean, ve výchozím stavu `true`.
 
 Pokud `domain` chybí, použije se:
 
@@ -54,6 +69,26 @@ pokryl wildcard certifikát. Správně je například
 `api-operon.bench.example.dev`; vnořený hostname
 `api.operon.bench.example.dev` povolený není. Domény se v jednom projektu
 nesmí opakovat.
+
+### Vývojové servery s kontrolou hostu
+
+Některé vývojové servery, například Vite, ve výchozím stavu odmítnou veřejný
+hostname předaný reverzní proxy. Pro takovou routu vypněte zachování hlavičky
+`Host`:
+
+```yaml
+routes:
+  - domain: docs-operon.bench.example.dev
+    service: docs
+    port: 3000
+    preserveHost: false
+```
+
+Bench pak upstreamu pošle `Host: localhost`, který Vite standardně povoluje.
+Původní veřejný hostname zůstává dostupný ve standardní hlavičce
+`X-Forwarded-Host`. Nastavení je záměrně volitelné, protože některé aplikace
+hlavičku `Host` používají pro vlastní routing. Nepoužívejte jako obecnou náhradu
+Vite `allowedHosts: true`, které vypíná ochranu proti DNS rebindingu.
 
 ## Vlastní příkazy
 

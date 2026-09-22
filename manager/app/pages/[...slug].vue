@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import type {
-  ActionResponse,
   ProjectState,
   ProjectsResponse,
   StartOperationResponse,
@@ -131,28 +130,12 @@ async function start(id: string) {
       method: "POST",
       body: {},
     });
-    const path = `/projects/${encodeURIComponent(id)}/logs?operation=${encodeURIComponent(result.operationId)}`;
+    const path = `/projects/${encodeURIComponent(id)}?operation=${encodeURIComponent(result.operationId)}`;
     if (isDashboard) await navigateTo(path);
     else window.location.assign(new URL(path, managerOrigin).toString());
   } catch (cause) {
     toast.add({ title: "Could not start project", description: conciseError(cause), color: "error" });
   } finally {
-    activeProject.value = undefined;
-  }
-}
-
-async function stop(id: string) {
-  activeProject.value = id;
-  try {
-    await $fetch<ActionResponse>(`/api/projects/${encodeURIComponent(id)}/down`, {
-      method: "POST",
-      body: {},
-    });
-    toast.add({ title: "Project stopped", color: "success" });
-  } catch (cause) {
-    toast.add({ title: "Could not stop project", description: conciseError(cause), color: "error" });
-  } finally {
-    if (isDashboard) await refreshDashboard();
     activeProject.value = undefined;
   }
 }
@@ -357,29 +340,9 @@ async function stop(id: string) {
           <template #footer>
             <div class="flex flex-wrap gap-2">
               <UButton
-                :loading="activeProject === project.id"
-                :disabled="Boolean(activeProject) || project.state === 'invalid' || project.state === 'running'"
-                @click="start(project.id)"
+                :to="`/projects/${encodeURIComponent(project.id)}`"
               >
-                Start
-              </UButton>
-              <UButton
-                color="error"
-                variant="soft"
-                :loading="activeProject === project.id"
-                :disabled="Boolean(activeProject) || project.state === 'invalid' || project.state === 'stopped'"
-                @click="stop(project.id)"
-              >
-                Stop
-              </UButton>
-              <UButton
-                v-if="project.state !== 'invalid'"
-                :disabled="Boolean(activeProject)"
-                :to="`/projects/${encodeURIComponent(project.id)}/logs`"
-                color="neutral"
-                variant="outline"
-              >
-                Logs
+                View
               </UButton>
             </div>
           </template>

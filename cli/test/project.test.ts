@@ -8,6 +8,29 @@ test("uses default commands and domain", () => {
   assert.equal(project.commands.down, "docker compose down");
   assert.equal(project.routes[0]?.domain, "demo.bench.test");
   assert.equal(project.routes[0]?.alias, "demo-web");
+  assert.equal(project.routes[0]?.preserveHost, true);
+});
+
+test("accepts disabling upstream Host preservation", () => {
+  const project = parseProjectConfig(
+    "name: demo\nroutes:\n  - service: web\n    port: 3000\n    preserveHost: false\n",
+    "/tmp/demo",
+    "bench.test",
+  );
+  assert.equal(project.routes[0]?.preserveHost, false);
+});
+
+test("rejects a non-boolean preserveHost value", () => {
+  for (const preserveHost of ["localhost", "1", "null"]) {
+    assert.throws(
+      () => parseProjectConfig(
+        `name: demo\nroutes:\n  - service: web\n    port: 3000\n    preserveHost: ${preserveHost}\n`,
+        "/tmp/demo",
+        "bench.test",
+      ),
+      /routes\[0\]\.preserveHost must be a boolean/,
+    );
+  }
 });
 
 test("accepts custom project commands", () => {
@@ -18,6 +41,28 @@ test("accepts custom project commands", () => {
   );
   assert.equal(project.commands.compose, "docker compose -f compose.dev.yml");
   assert.equal(project.commands.up, "npm run docker:dev:up");
+});
+
+test("accepts a relative workspace without checking whether the file exists", () => {
+  const project = parseProjectConfig(
+    "name: demo\nworkspace: .vscode/dev.code-workspace\nroutes:\n  - { service: web, port: 3000 }\n",
+    "/tmp/demo",
+    "bench.test",
+  );
+  assert.equal(project.workspace, ".vscode/dev.code-workspace");
+});
+
+test("rejects workspace paths outside the project and non-workspace files", () => {
+  for (const workspace of ["../other.code-workspace", "/tmp/other.code-workspace", "folder/../other.code-workspace", "dev.txt"]) {
+    assert.throws(
+      () => parseProjectConfig(
+        `name: demo\nworkspace: ${workspace}\nroutes:\n  - { service: web, port: 3000 }\n`,
+        "/tmp/demo",
+        "bench.test",
+      ),
+      /workspace must be a relative/,
+    );
+  }
 });
 
 test("requires custom up and down together", () => {
