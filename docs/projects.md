@@ -15,6 +15,32 @@ bench init
 Příkaz odvodí `name` z názvu aktuálního adresáře a vytvoří výchozí route
 `app:3000`. Existující `bench.yml` nikdy nepřepíše.
 
+Název lze zadat explicitně jako platný lowercase DNS slug:
+
+```bash
+bench init --name my-project
+```
+
+## Vytvoření projektu ze šablony
+
+V prázdném aktuálním adresáři lze vytvořit celý projekt z Git šablony:
+
+```bash
+bench init --template nuxt
+bench init --template=nuxt --name=my-project
+```
+
+Repozitář vznikne připojením aliasu k prefixu nastavenému pomocí
+`BENCH_TEMPLATE_REPOSITORY_PREFIX`. Bench naklonuje jeho výchozí větev, přepíše
+top-level `name` v `bench.yml`, případně spustí `.bench/hooks/init.mjs` a založí
+nový Git repozitář na větvi `main`. Historie ani remote šablony se nepřenášejí a
+počáteční commit se nevytváří.
+
+Hook se spouští přes Node v kořeni připravovaného projektu s argumenty
+`--name <slug>` a `--url <https-url>`. Po úspěchu Bench odstraní celou `.bench`.
+Používejte proto jen důvěryhodné template repozitáře. Při jakékoliv chybě zůstane
+cílový adresář prázdný.
+
 ```yaml
 name: operon
 

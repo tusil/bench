@@ -1,5 +1,6 @@
 export interface SystemConfig {
   domain: string;
+  templateRepositoryPrefix: string;
   network: string;
   caddyContainer: string;
   generatedDirectory: string;

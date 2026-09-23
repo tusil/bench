@@ -45,6 +45,7 @@ test("discovers direct project directories and reports their state", () => {
 
   const system: SystemConfig = {
     domain: "bench.test",
+    templateRepositoryPrefix: "/srv/bench-template-",
     network: "bench-proxy",
     caddyContainer: "bench-caddy",
     generatedDirectory,
@@ -82,6 +83,7 @@ test("prefers configured workspace and auto-detects only one root workspace", ()
 
   const projects = listProjects({
     domain: "bench.test",
+    templateRepositoryPrefix: "/srv/bench-template-",
     network: "bench-proxy",
     caddyContainer: "bench-caddy",
     generatedDirectory,

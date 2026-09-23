@@ -32,6 +32,7 @@ V `.env` nastavte:
 TS_HOSTNAME=bench-dev
 TS_AUTHKEY=tskey-auth-...
 BENCH_PROJECTS_DIR=Projects
+BENCH_TEMPLATE_REPOSITORY_PREFIX=git@github.com:tusil/bench-template-
 BENCH_DOMAIN=bench.example.dev
 DUCKDNS_DOMAIN=example-bench.duckdns.org
 DUCKDNS_API_TOKEN=00000000-0000-0000-0000-000000000000
@@ -42,6 +43,7 @@ DUCKDNS_API_TOKEN=00000000-0000-0000-0000-000000000000
 | `TS_HOSTNAME` | Unikátní hostname serveru v Tailscale MagicDNS; povinný při každém běhu |
 | `TS_AUTHKEY` | Auth key potřebný pouze pro nový nebo odhlášený server |
 | `BENCH_PROJECTS_DIR` | Cesta k projektům relativní k home uživatele; výchozí `Projects` |
+| `BENCH_TEMPLATE_REPOSITORY_PREFIX` | Prefix Git repozitářů šablon; alias z `--template` se připojí na konec |
 | `BENCH_DOMAIN` | Doména Manageru a základ wildcard domény projektů |
 | `DUCKDNS_DOMAIN` | Delegovaný cíl ACME challenge, nikoliv adresa pro provoz |
 | `DUCKDNS_API_TOKEN` | Token, kterým Caddy vytváří ACME TXT záznam |
@@ -101,7 +103,7 @@ set -a
 source .env
 set +a
 export ANSIBLE_CONFIG="$PWD/ansible.cfg"
-sudo --preserve-env=ANSIBLE_CONFIG,TS_HOSTNAME,TS_AUTHKEY,BENCH_PROJECTS_DIR,BENCH_DOMAIN,DUCKDNS_DOMAIN,DUCKDNS_API_TOKEN ansible-playbook \
+sudo --preserve-env=ANSIBLE_CONFIG,TS_HOSTNAME,TS_AUTHKEY,BENCH_PROJECTS_DIR,BENCH_TEMPLATE_REPOSITORY_PREFIX,BENCH_DOMAIN,DUCKDNS_DOMAIN,DUCKDNS_API_TOKEN ansible-playbook \
   --inventory ansible/inventory/hosts.yml \
   ansible/playbook.yml
 ```

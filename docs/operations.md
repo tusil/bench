@@ -44,7 +44,7 @@ set -a
 source .env
 set +a
 export ANSIBLE_CONFIG="$PWD/ansible.cfg"
-sudo --preserve-env=ANSIBLE_CONFIG,TS_HOSTNAME,TS_AUTHKEY,BENCH_PROJECTS_DIR,BENCH_DOMAIN,DUCKDNS_DOMAIN,DUCKDNS_API_TOKEN ansible-playbook \
+sudo --preserve-env=ANSIBLE_CONFIG,TS_HOSTNAME,TS_AUTHKEY,BENCH_PROJECTS_DIR,BENCH_TEMPLATE_REPOSITORY_PREFIX,BENCH_DOMAIN,DUCKDNS_DOMAIN,DUCKDNS_API_TOKEN ansible-playbook \
   --inventory ansible/inventory/hosts.yml \
   --tags bench_cli \
   ansible/playbook.yml

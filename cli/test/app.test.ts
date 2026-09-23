@@ -39,6 +39,7 @@ test("rolls back a new network connection and fragment after Caddy failure", () 
   const project = parseProjectConfig("name: demo\nroutes:\n  - { service: web, port: 3000 }\n", "/srv/demo", "bench.test");
   const system: SystemConfig = {
     domain: "bench.test",
+    templateRepositoryPrefix: "/srv/bench-template-",
     network: "bench-proxy",
     caddyContainer: "bench-caddy",
     generatedDirectory,
@@ -56,6 +57,7 @@ test("restores the route when the configured down command fails", () => {
   const project = parseProjectConfig("name: demo\nroutes:\n  - { service: web, port: 3000 }\n", "/srv/demo", "bench.test");
   const system: SystemConfig = {
     domain: "bench.test",
+    templateRepositoryPrefix: "/srv/bench-template-",
     network: "bench-proxy",
     caddyContainer: "bench-caddy",
     generatedDirectory,

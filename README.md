@@ -96,7 +96,8 @@ certifikát. Volitelné vlastní příkazy a kompletní pravidla popisuje
 
 | Příkaz | Popis |
 | --- | --- |
-| `bench init` | Vytvoří základní `bench.yml` v aktuálním adresáři |
+| `bench init [--name slug]` | Vytvoří základní `bench.yml` v aktuálním adresáři |
+| `bench init --template name [--name slug]` | Vytvoří projekt z nakonfigurované Git šablony |
 | `bench up` | Spustí projekt a zpřístupní jeho routy |
 | `bench down` | Odebere routy a zastaví projekt |
 | `bench logs [--tail N] [--follow]` | Zobrazí logy Compose projektu |
@@ -112,6 +113,6 @@ certifikát. Volitelné vlastní příkazy a kompletní pravidla popisuje
 
 ## Aktuální hranice
 
-Bench zatím neřeší firewall, zálohy, správu secrets, projektové šablony,
-Portless, exit node ani subnet routing. Tailscale SSH se nezapíná; přístup k
+Bench zatím neřeší firewall, zálohy, správu secrets, Portless, exit node ani
+subnet routing. Tailscale SSH se nezapíná; přístup k
 serveru používá standardní OpenSSH přes privátní Tailscale síť.

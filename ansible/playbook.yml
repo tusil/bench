@@ -7,6 +7,7 @@
   vars:
     bench_user: "{{ lookup('ansible.builtin.env', 'SUDO_USER') | default(lookup('ansible.builtin.env', 'USER'), true) }}"
     bench_projects_relative_directory: "{{ lookup('ansible.builtin.env', 'BENCH_PROJECTS_DIR') | default('Projects', true) }}"
+    bench_template_repository_prefix: "{{ lookup('ansible.builtin.env', 'BENCH_TEMPLATE_REPOSITORY_PREFIX') }}"
 
   pre_tasks:
     - name: Validate the invoking user
@@ -39,6 +40,14 @@
           - "'.' not in bench_projects_relative_directory.split('/')"
           - "'..' not in bench_projects_relative_directory.split('/')"
         fail_msg: BENCH_PROJECTS_DIR must be a path relative to the Bench user's home.
+        quiet: true
+
+    - name: Validate the template repository prefix
+      tags: always
+      ansible.builtin.assert:
+        that:
+          - bench_template_repository_prefix | length > 0
+        fail_msg: BENCH_TEMPLATE_REPOSITORY_PREFIX must be a non-empty Git repository prefix.
         quiet: true
 
     - name: Set the projects directory

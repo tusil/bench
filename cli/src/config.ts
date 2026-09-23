@@ -24,6 +24,7 @@ export function loadSystemConfig(path = "/etc/bench/config.json"): SystemConfig 
   const config = value as Record<string, unknown>;
   return {
     domain: requiredString(config.domain, "domain").toLowerCase(),
+    templateRepositoryPrefix: requiredString(config.templateRepositoryPrefix, "templateRepositoryPrefix"),
     network: requiredString(config.network, "network"),
     caddyContainer: requiredString(config.caddyContainer, "caddyContainer"),
     generatedDirectory: requiredString(config.generatedDirectory, "generatedDirectory"),

@@ -26,6 +26,7 @@ The repository includes:
 - the `bench` project lifecycle CLI
 - the Nuxt Bench Manager
 - the configurable project directory
+- Git-backed project templates
 
 Do not add yet:
 
@@ -33,7 +34,6 @@ Do not add yet:
 - firewall management
 - backups
 - secrets management
-- project templates
 
 ## Bench Manager UI
 

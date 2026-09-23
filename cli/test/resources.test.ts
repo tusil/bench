@@ -72,6 +72,7 @@ test("collects host usage and aggregates all running project containers", () => 
 
   const system: SystemConfig = {
     domain: "bench.test",
+    templateRepositoryPrefix: "/srv/bench-template-",
     network: "bench-proxy",
     caddyContainer: "bench-caddy",
     generatedDirectory,
