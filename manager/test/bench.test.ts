@@ -72,7 +72,7 @@ describe("project list", () => {
     expect(() => parseProjectList("{}")).toThrow(ManagerError);
   });
 
-  it("returns an editor link only in project detail", async () => {
+  it("returns an editor link when manager credentials are provided", async () => {
     const withWorkspace = JSON.stringify({ projects: [{
       ...JSON.parse(response).projects[0],
       workspace: ".vscode/dev.code-workspace",
@@ -85,6 +85,15 @@ describe("project list", () => {
         name: "demo",
         routes: ["https://demo.bench.test"],
         state: "stopped",
+      }],
+    });
+    expect(await service.list("user", "bench-dev")).toEqual({
+      projects: [{
+        id: "demo-dir",
+        name: "demo",
+        routes: ["https://demo.bench.test"],
+        state: "stopped",
+        vscodeUri: "vscode://vscode-remote/ssh-remote+user@bench-dev/home/user/Projects/demo-dir/.vscode/dev.code-workspace",
       }],
     });
     expect(await service.detail("demo-dir", "user", "bench-dev")).toEqual({

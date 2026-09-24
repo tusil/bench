@@ -236,8 +236,11 @@ export function createProjectService(
   }
 
   return {
-    async list(): Promise<ProjectsResponse> {
-      const projects = (await rawProjects()).map(({ root: _root, workspace: _workspace, ...project }) => project);
+    async list(sshUser = "", sshHost = ""): Promise<ProjectsResponse> {
+      const projects = (await rawProjects()).map(({ root, workspace, ...project }) => ({
+        ...project,
+        vscodeUri: sshUser && sshHost ? vscodeUri(sshUser, sshHost, root, workspace) : undefined,
+      }));
       return { projects };
     },
 

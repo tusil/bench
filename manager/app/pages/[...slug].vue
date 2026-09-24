@@ -1,5 +1,10 @@
 <script setup lang="ts">
+import type { DropdownMenuItem } from "@nuxt/ui";
 import type {
+  ActionResponse,
+  ProjectListItem,
+  ProjectLogEndEvent,
+  ProjectLogFailureEvent,
   ProjectState,
   ProjectsResponse,
   StartOperationResponse,
@@ -32,6 +37,16 @@ const routedProject = computed(() => data.value
 const projectResources = computed(() => new Map(
   resources.value?.projects.map((project) => [project.id, project]) || [],
 ));
+const regularProjects = computed(() => data.value?.projects
+  .filter((project) => !project.id.startsWith("bench-template-")) || []);
+const templateProjects = computed(() => data.value?.projects
+  .filter((project) => project.id.startsWith("bench-template-")) || []);
+const projectSections = computed(() => [
+  ...(regularProjects.value.length ? [{ title: "Projects", projects: regularProjects.value }] : []),
+  ...(templateProjects.value.length ? [{ title: "Templates", projects: templateProjects.value }] : []),
+]);
+const dashboardAction = ref<{ projectId: string; action: "start" | "stop" }>();
+let startSource: EventSource | undefined;
 
 if (import.meta.server && !isDashboard && data.value && !routedProject.value) {
   const event = useRequestEvent();
@@ -92,12 +107,145 @@ function projectMemory(id: string): string {
   return usage?.available ? formatBytes(usage.memoryUsedBytes) : resourcesStatus.value === "pending" ? "Loading..." : "Unavailable";
 }
 
+function projectActionPending(project: ProjectListItem): boolean {
+  return dashboardAction.value?.projectId === project.id;
+}
+
+function projectStateLabel(project: ProjectListItem): string {
+  if (!projectActionPending(project)) return statePresentation[project.state].label;
+  return dashboardAction.value?.action === "start" ? "Starting..." : "Stopping...";
+}
+
+function projectStateColor(project: ProjectListItem): "success" | "neutral" | "warning" | "error" {
+  return projectActionPending(project) ? "warning" : statePresentation[project.state].color;
+}
+
+function stateMenuItems(project: ProjectListItem): DropdownMenuItem[] {
+  if (project.state === "invalid") return [];
+  if (project.state === "stopped") {
+    return [{
+      label: "Start",
+      icon: "i-lucide-play",
+      onSelect: () => void startDashboardProject(project.id),
+    }];
+  }
+  if (project.state === "running") {
+    return [{
+      label: "Stop",
+      icon: "i-lucide-square",
+      color: "error",
+      onSelect: () => void stopDashboardProject(project.id),
+    }];
+  }
+  return [{
+    label: "Start again",
+    icon: "i-lucide-rotate-cw",
+    onSelect: () => void startDashboardProject(project.id),
+  }, {
+    label: "Stop",
+    icon: "i-lucide-square",
+    color: "error",
+    onSelect: () => void stopDashboardProject(project.id),
+  }];
+}
+
+function addressMenuItems(project: ProjectListItem): DropdownMenuItem[] {
+  return project.routes.map((route) => ({
+    label: route,
+    icon: "i-lucide-external-link",
+    to: route,
+    target: "_blank",
+    external: true,
+  }));
+}
+
 async function refreshDashboard(): Promise<void> {
   dashboardRefreshing.value = true;
   try {
     await Promise.all([refresh(), refreshResources({ dedupe: "defer" })]);
   } finally {
     dashboardRefreshing.value = false;
+  }
+}
+
+function monitorProjectStart(id: string, operationId: string): void {
+  startSource?.close();
+  const source = new EventSource(
+    `/api/projects/${encodeURIComponent(id)}/operations/${encodeURIComponent(operationId)}`,
+  );
+  startSource = source;
+  let settled = false;
+
+  async function finish(success: boolean, description?: string): Promise<void> {
+    if (settled) return;
+    settled = true;
+    source.close();
+    if (startSource === source) startSource = undefined;
+    try {
+      await refreshDashboard();
+      toast.add(success
+        ? { title: "Project started", color: "success" }
+        : { title: "Could not start project", description, color: "error" });
+    } finally {
+      if (dashboardAction.value?.projectId === id && dashboardAction.value.action === "start") {
+        dashboardAction.value = undefined;
+      }
+    }
+  }
+
+  source.addEventListener("end", (event) => {
+    try {
+      const result = JSON.parse((event as MessageEvent<string>).data) as ProjectLogEndEvent;
+      const description = result.signal
+        ? `Project start ended with signal ${result.signal}.`
+        : `Project start exited with code ${result.code ?? "unknown"}.`;
+      void finish(result.code === 0, result.code === 0 ? undefined : description);
+    } catch {
+      void finish(false, "The server returned an invalid operation result.");
+    }
+  });
+  source.addEventListener("failure", (event) => {
+    try {
+      const result = JSON.parse((event as MessageEvent<string>).data) as ProjectLogFailureEvent;
+      void finish(false, result.message);
+    } catch {
+      void finish(false, "The server returned an invalid operation failure.");
+    }
+  });
+  source.onerror = () => {
+    void finish(false, "The start status connection was interrupted. The project may still be starting.");
+  };
+}
+
+async function startDashboardProject(id: string): Promise<void> {
+  if (dashboardAction.value) return;
+  dashboardAction.value = { projectId: id, action: "start" };
+  try {
+    const result = await $fetch<StartOperationResponse>(`/api/projects/${encodeURIComponent(id)}/up`, {
+      method: "POST",
+      body: {},
+    });
+    monitorProjectStart(id, result.operationId);
+  } catch (cause) {
+    dashboardAction.value = undefined;
+    toast.add({ title: "Could not start project", description: conciseError(cause), color: "error" });
+  }
+}
+
+async function stopDashboardProject(id: string): Promise<void> {
+  if (dashboardAction.value) return;
+  dashboardAction.value = { projectId: id, action: "stop" };
+  try {
+    await $fetch<ActionResponse>(`/api/projects/${encodeURIComponent(id)}/down`, {
+      method: "POST",
+      body: {},
+    });
+    await refreshDashboard();
+    toast.add({ title: "Project stopped", color: "success" });
+  } catch (cause) {
+    toast.add({ title: "Could not stop project", description: conciseError(cause), color: "error" });
+  } finally {
+    dashboardAction.value = undefined;
   }
 }
 
@@ -119,6 +267,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  startSource?.close();
   if (resourcesTimer) clearInterval(resourcesTimer);
   document.removeEventListener("visibilitychange", handleVisibilityChange);
 });
@@ -154,7 +303,7 @@ async function start(id: string) {
             color="neutral"
             variant="outline"
             :loading="dashboardRefreshing"
-            :disabled="Boolean(activeProject)"
+            :disabled="Boolean(activeProject) || Boolean(dashboardAction)"
             @click="refreshDashboard"
           >
             Refresh
@@ -272,82 +421,126 @@ async function start(id: string) {
         description="Add a bench.yml file to a direct subdirectory of the configured projects directory."
       />
 
-      <UPageGrid v-else class="mt-8">
-        <UCard
-          v-for="project in data?.projects"
-          :key="project.id"
-          class="flex flex-col"
-          :ui="{ body: 'flex-1' }"
-        >
-          <template #header>
-            <div class="flex items-start justify-between gap-4">
-              <div class="min-w-0">
-                <h2 class="truncate font-semibold">
-                  {{ project.name || project.id }}
-                </h2>
-                <p v-if="project.name && project.name !== project.id" class="truncate text-xs text-muted">
-                  {{ project.id }}
-                </p>
-              </div>
-              <UBadge :color="statePresentation[project.state].color" variant="subtle">
-                {{ statePresentation[project.state].label }}
-              </UBadge>
-            </div>
-          </template>
+      <template v-else>
+        <section v-for="section in projectSections" :key="section.title" class="mt-8">
+          <h2 class="text-lg font-semibold">
+            {{ section.title }}
+          </h2>
 
-          <ul v-if="project.routes.length" class="space-y-2">
-            <li v-for="route in project.routes" :key="route">
-              <ULink
-                :to="route"
-                external
-                target="_blank"
-                class="break-all text-sm"
-              >
-                {{ route }}
-              </ULink>
-            </li>
-          </ul>
-          <p v-else class="text-sm text-muted">
-            No valid routes.
-          </p>
-          <UAlert
-            v-if="project.error"
-            class="mt-4"
-            color="warning"
-            variant="subtle"
-            title="Project state is inconsistent"
-            :description="project.error"
-          />
-          <dl class="mt-5 grid grid-cols-2 gap-4 border-t border-default pt-4">
-            <div>
-              <dt class="text-xs text-muted">
-                CPU
-              </dt>
-              <dd class="mt-1 text-sm font-medium">
-                {{ projectCpu(project.id) }}
-              </dd>
-            </div>
-            <div>
-              <dt class="text-xs text-muted">
-                RAM
-              </dt>
-              <dd class="mt-1 text-sm font-medium">
-                {{ projectMemory(project.id) }}
-              </dd>
-            </div>
-          </dl>
+          <UPageGrid class="mt-4">
+            <UCard
+              v-for="project in section.projects"
+              :key="project.id"
+              class="flex flex-col"
+              :ui="{ header: 'flex-1' }"
+            >
+              <template #header>
+                <div class="flex items-start justify-between gap-4">
+                  <div class="min-w-0">
+                    <h3 class="truncate font-semibold">
+                      {{ project.name || project.id }}
+                    </h3>
+                    <p v-if="project.name && project.name !== project.id" class="truncate text-xs text-muted">
+                      {{ project.id }}
+                    </p>
+                  </div>
 
-          <template #footer>
-            <div class="flex flex-wrap gap-2">
-              <UButton
-                :to="`/projects/${encodeURIComponent(project.id)}`"
-              >
-                View
-              </UButton>
-            </div>
-          </template>
-        </UCard>
-      </UPageGrid>
+                  <UDropdownMenu
+                    :items="stateMenuItems(project)"
+                    :disabled="Boolean(dashboardAction) || project.state === 'invalid'"
+                    :content="{ align: 'end' }"
+                  >
+                    <UButton
+                      size="xs"
+                      variant="subtle"
+                      :color="projectStateColor(project)"
+                      :loading="projectActionPending(project)"
+                      :trailing-icon="project.state === 'invalid' ? undefined : 'i-lucide-chevron-down'"
+                    >
+                      {{ projectStateLabel(project) }}
+                    </UButton>
+                  </UDropdownMenu>
+                </div>
+
+                <UAlert
+                  v-if="project.error"
+                  class="mt-4"
+                  :color="project.state === 'invalid' ? 'error' : 'warning'"
+                  variant="subtle"
+                  :title="project.state === 'invalid' ? 'Project configuration is invalid' : 'Project state is inconsistent'"
+                  :description="project.error"
+                />
+              </template>
+
+              <template #footer>
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                  <dl class="flex min-w-0 items-center gap-4">
+                    <div>
+                      <dt class="text-xs text-muted">
+                        CPU
+                      </dt>
+                      <dd class="text-sm font-medium">
+                        {{ projectCpu(project.id) }}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt class="text-xs text-muted">
+                        RAM
+                      </dt>
+                      <dd class="text-sm font-medium">
+                        {{ projectMemory(project.id) }}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  <div class="ml-auto flex items-center gap-1">
+                    <UTooltip text="View details and logs">
+                      <UButton
+                        :to="`/projects/${encodeURIComponent(project.id)}`"
+                        icon="i-lucide-file-text"
+                        color="neutral"
+                        variant="ghost"
+                        square
+                        aria-label="View details and logs"
+                      />
+                    </UTooltip>
+
+                    <UTooltip text="Open in VS Code">
+                      <UButton
+                        :to="project.vscodeUri"
+                        :disabled="!project.vscodeUri"
+                        icon="i-lucide-code-xml"
+                        color="neutral"
+                        variant="ghost"
+                        square
+                        external
+                        aria-label="Open in VS Code"
+                      />
+                    </UTooltip>
+
+                    <UDropdownMenu
+                      :items="addressMenuItems(project)"
+                      :disabled="project.routes.length === 0"
+                      :content="{ align: 'end' }"
+                    >
+                      <UTooltip text="Open project address">
+                        <UButton
+                          icon="i-lucide-globe"
+                          color="neutral"
+                          variant="ghost"
+                          square
+                          :disabled="project.routes.length === 0"
+                          aria-label="Open project address"
+                        />
+                      </UTooltip>
+                    </UDropdownMenu>
+                  </div>
+                </div>
+              </template>
+            </UCard>
+          </UPageGrid>
+        </section>
+      </template>
     </UContainer>
 
     <UContainer

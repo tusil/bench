@@ -8,8 +8,12 @@ export interface ProjectSummary {
   error?: string;
 }
 
+export interface ProjectListItem extends ProjectSummary {
+  vscodeUri?: string;
+}
+
 export interface ProjectsResponse {
-  projects: ProjectSummary[];
+  projects: ProjectListItem[];
 }
 
 export interface ProjectDetailResponse {

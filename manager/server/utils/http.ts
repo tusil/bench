@@ -81,9 +81,14 @@ export async function projectAction(event: H3Event, action: "up" | "down") {
   }
 }
 
-export async function projectList() {
+export async function projectList(event: H3Event) {
   try {
-    return await projectService.list();
+    const config = useRuntimeConfig(event);
+    const managerRequest = isManagerHost(getHeader(event, "host"), config.public.managerOrigin);
+    return await projectService.list(
+      managerRequest ? config.sshUser : "",
+      managerRequest ? config.sshHost : "",
+    );
   } catch (error) {
     asHttpError(error);
   }
