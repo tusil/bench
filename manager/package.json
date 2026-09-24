@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "nuxt build",
+    "build": "nuxt prepare && nuxt build",
     "dev": "nuxt dev",
     "postinstall": "nuxt prepare",
     "test": "vitest run",

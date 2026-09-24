@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { DropdownMenuItem } from "@nuxt/ui";
 import type {
   ActionResponse,
   ProjectDetailResponse,
@@ -59,6 +60,47 @@ const statePresentation: Record<ProjectState, {
   degraded: { label: "Degraded", color: "warning" },
   invalid: { label: "Invalid", color: "error" },
 };
+
+const projectStateLabel = computed(() => {
+  if (!project.value) return "";
+  if (stopRequestPending.value) return "Stopping...";
+  if (startRequestPending.value || connectionStatus.value === "starting") return "Starting...";
+  return statePresentation[project.value.state].label;
+});
+
+const projectStateColor = computed<"success" | "neutral" | "warning" | "error">(() => {
+  if (!project.value) return "neutral";
+  return actionPending.value ? "warning" : statePresentation[project.value.state].color;
+});
+
+const stateMenuItems = computed<DropdownMenuItem[]>(() => {
+  if (!project.value || project.value.state === "invalid") return [];
+  if (project.value.state === "stopped") {
+    return [{
+      label: canStartAgain.value ? "Start again" : "Start",
+      icon: canStartAgain.value ? "i-lucide-rotate-cw" : "i-lucide-play",
+      onSelect: () => void startProject(),
+    }];
+  }
+  if (project.value.state === "running") {
+    return [{
+      label: "Stop",
+      icon: "i-lucide-square",
+      color: "error",
+      onSelect: () => void stopProject(),
+    }];
+  }
+  return [{
+    label: "Start again",
+    icon: "i-lucide-rotate-cw",
+    onSelect: () => void startProject(),
+  }, {
+    label: "Stop",
+    icon: "i-lucide-square",
+    color: "error",
+    onSelect: () => void stopProject(),
+  }];
+});
 
 const toast = useToast();
 
@@ -290,20 +332,33 @@ onBeforeUnmount(disconnect);
 </script>
 
 <template>
-  <UContainer as="main" class="flex min-h-screen flex-col py-6 sm:py-10">
+  <UContainer
+    as="main"
+    class="flex flex-col"
+    :class="isManager ? 'min-h-0 flex-1 max-w-none px-0' : 'min-h-screen py-6 sm:py-10'"
+  >
     <UPageHeader
       headline="Youngmedia Bench"
       :title="project?.name || project?.id || projectId"
       description="Project controls and live logs."
     >
       <template #links>
-        <UBadge
+        <UDropdownMenu
           v-if="project"
-          :color="statePresentation[project.state].color"
-          variant="subtle"
+          :items="stateMenuItems"
+          :disabled="actionPending || project.state === 'invalid'"
+          :content="{ align: 'end' }"
         >
-          {{ statePresentation[project.state].label }}
-        </UBadge>
+          <UButton
+            size="xs"
+            variant="subtle"
+            :color="projectStateColor"
+            :loading="actionPending"
+            :trailing-icon="project.state === 'invalid' ? undefined : 'i-lucide-chevron-down'"
+          >
+            {{ projectStateLabel }}
+          </UButton>
+        </UDropdownMenu>
         <UButton to="/" color="neutral" variant="outline">
           Back to projects
         </UButton>
@@ -336,22 +391,6 @@ onBeforeUnmount(disconnect);
 
     <template v-else-if="project">
       <div class="mt-6 flex flex-wrap items-center gap-2">
-        <UButton
-          :loading="startRequestPending"
-          :disabled="actionPending || project.state === 'invalid' || project.state === 'running'"
-          @click="startProject"
-        >
-          {{ canStartAgain ? "Start again" : "Start" }}
-        </UButton>
-        <UButton
-          color="error"
-          variant="soft"
-          :loading="stopRequestPending"
-          :disabled="actionPending || project.state === 'invalid' || project.state === 'stopped'"
-          @click="stopProject"
-        >
-          Stop
-        </UButton>
         <UButton :to="data?.vscodeUri" :disabled="!data?.vscodeUri" external color="neutral" variant="outline">
           Open in VS Code
         </UButton>
@@ -410,10 +449,13 @@ onBeforeUnmount(disconnect);
           </UButton>
         </div>
 
-        <UCard class="mt-4 min-h-0 flex-1" :ui="{ body: 'p-0 sm:p-0' }">
+        <UCard
+          class="mt-4 flex min-h-80 flex-1 flex-col"
+          :ui="{ body: 'min-h-0 flex-1 p-0 sm:p-0' }"
+        >
           <div
             ref="logViewport"
-            class="h-[65vh] overflow-auto p-4 font-mono text-xs leading-5"
+            class="h-full overflow-auto p-4 font-mono text-xs leading-5"
             @scroll.passive="trackScroll"
           >
             <pre v-if="logText" class="min-w-max whitespace-pre text-default">{{ logText }}</pre>

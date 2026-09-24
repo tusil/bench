@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { DropdownMenuItem } from "@nuxt/ui";
+import { useManagerResources } from "~/composables/useManagerResources";
 import type {
   ActionResponse,
   ProjectListItem,
@@ -9,7 +10,7 @@ import type {
   ProjectsResponse,
   StartOperationResponse,
 } from "~~/shared/types/projects";
-import type { CapacityUsage, ProjectResourceUsage, ResourcesResponse } from "~~/shared/types/resources";
+import type { ProjectResourceUsage } from "~~/shared/types/resources";
 import {
   findProjectByHostname,
   hostnameFromUrl,
@@ -19,17 +20,17 @@ const toast = useToast();
 const config = useRuntimeConfig();
 const requestUrl = useRequestURL();
 const activeProject = ref<string>();
-const { data, error, refresh, status } = await useFetch<ProjectsResponse>("/api/projects");
+const { data, error, refresh, status } = await useFetch<ProjectsResponse>("/api/projects", {
+  key: "manager-projects",
+});
 
 const managerOrigin = config.public.managerOrigin;
 const isDashboard = requestUrl.hostname.toLowerCase() === hostnameFromUrl(managerOrigin);
 const {
   data: resources,
-  error: resourcesError,
   refresh: refreshResources,
   status: resourcesStatus,
-} = await useFetch<ResourcesResponse>("/api/resources", { immediate: isDashboard });
-const dashboardRefreshing = ref(false);
+} = await useManagerResources(isDashboard);
 
 const routedProject = computed(() => data.value
   ? findProjectByHostname(data.value.projects, requestUrl.hostname)
@@ -87,10 +88,6 @@ function formatBytes(bytes: number): string {
   const units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
   const unit = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   return `${numberFormatter.format(bytes / 1024 ** unit)} ${units[unit]}`;
-}
-
-function capacityPercent(capacity: CapacityUsage): number {
-  return capacity.totalBytes === 0 ? 0 : Math.min(100, capacity.usedBytes / capacity.totalBytes * 100);
 }
 
 function projectUsage(id: string): ProjectResourceUsage | undefined {
@@ -160,12 +157,7 @@ function addressMenuItems(project: ProjectListItem): DropdownMenuItem[] {
 }
 
 async function refreshDashboard(): Promise<void> {
-  dashboardRefreshing.value = true;
-  try {
-    await Promise.all([refresh(), refreshResources({ dedupe: "defer" })]);
-  } finally {
-    dashboardRefreshing.value = false;
-  }
+  await Promise.all([refresh(), refreshResources({ dedupe: "defer" })]);
 }
 
 function monitorProjectStart(id: string, operationId: string): void {
@@ -249,27 +241,8 @@ async function stopDashboardProject(id: string): Promise<void> {
   }
 }
 
-async function pollResources(): Promise<void> {
-  if (!isDashboard || document.hidden || resourcesStatus.value === "pending") return;
-  await refreshResources({ dedupe: "defer" });
-}
-
-function handleVisibilityChange(): void {
-  if (!document.hidden) void pollResources();
-}
-
-let resourcesTimer: ReturnType<typeof setInterval> | undefined;
-
-onMounted(() => {
-  if (!isDashboard) return;
-  resourcesTimer = setInterval(() => void pollResources(), 5_000);
-  document.addEventListener("visibilitychange", handleVisibilityChange);
-});
-
 onBeforeUnmount(() => {
   startSource?.close();
-  if (resourcesTimer) clearInterval(resourcesTimer);
-  document.removeEventListener("visibilitychange", handleVisibilityChange);
 });
 
 async function start(id: string) {
@@ -292,142 +265,35 @@ async function start(id: string) {
 
 <template>
   <div>
-    <UContainer v-if="isDashboard" as="main" class="min-h-screen py-10">
-      <UPageHeader
-        headline="Youngmedia"
-        title="Bench"
-        description="Projects available on this development server."
-      >
-        <template #links>
-          <UButton
-            color="neutral"
-            variant="outline"
-            :loading="dashboardRefreshing"
-            :disabled="Boolean(activeProject) || Boolean(dashboardAction)"
-            @click="refreshDashboard"
-          >
-            Refresh
-          </UButton>
-        </template>
-      </UPageHeader>
-
+    <main v-if="isDashboard" class="flex flex-col gap-6">
       <UAlert
         v-if="error"
-        class="mt-8"
         color="error"
         variant="subtle"
         title="Could not load projects"
         :description="responseError(error)"
       />
 
-      <UAlert
-        v-if="resourcesError"
-        class="mt-4"
-        color="error"
-        variant="subtle"
-        title="Could not load system resources"
-        :description="responseError(resourcesError)"
-      />
-
-      <UPageGrid v-if="resourcesStatus === 'pending' && !resources" class="mt-8">
-        <USkeleton v-for="index in 3" :key="index" class="h-44" />
-      </UPageGrid>
-
-      <UPageGrid v-else-if="resources" class="mt-8">
-        <UCard>
-          <p class="text-sm text-muted">
-            CPU
-          </p>
-          <div class="mt-2 flex items-end justify-between gap-4">
-            <p class="text-2xl font-semibold">
-              {{ formatPercent(resources.system.cpu.usagePercent) }}
-            </p>
-            <p class="text-sm text-muted">
-              {{ resources.system.cpu.logicalCores }} logical cores
-            </p>
-          </div>
-          <UProgress
-            class="mt-4"
-            size="sm"
-            :model-value="resources.system.cpu.usagePercent"
-          />
-        </UCard>
-
-        <UCard>
-          <p class="text-sm text-muted">
-            Memory
-          </p>
-          <div class="mt-2 flex items-baseline justify-between gap-4">
-            <p class="font-semibold">
-              RAM
-            </p>
-            <p class="text-sm">
-              {{ formatBytes(resources.system.memory.usedBytes) }} /
-              {{ formatBytes(resources.system.memory.totalBytes) }}
-            </p>
-          </div>
-          <UProgress
-            class="mt-2"
-            size="sm"
-            :model-value="capacityPercent(resources.system.memory)"
-          />
-          <div class="mt-4 flex items-baseline justify-between gap-4">
-            <p class="font-semibold">
-              Swap
-            </p>
-            <p v-if="resources.system.swap.totalBytes" class="text-sm">
-              {{ formatBytes(resources.system.swap.usedBytes) }} /
-              {{ formatBytes(resources.system.swap.totalBytes) }}
-            </p>
-            <p v-else class="text-sm text-muted">
-              Not configured
-            </p>
-          </div>
-          <UProgress
-            v-if="resources.system.swap.totalBytes"
-            class="mt-2"
-            size="sm"
-            :model-value="capacityPercent(resources.system.swap)"
-          />
-        </UCard>
-
-        <UCard>
-          <p class="text-sm text-muted">
-            Projects disk
-          </p>
-          <p class="mt-2 text-2xl font-semibold">
-            {{ formatPercent(capacityPercent(resources.system.disk)) }}
-          </p>
-          <UProgress
-            class="mt-4"
-            size="sm"
-            :model-value="capacityPercent(resources.system.disk)"
-          />
-          <p class="mt-3 text-sm text-muted">
-            {{ formatBytes(resources.system.disk.usedBytes) }} /
-            {{ formatBytes(resources.system.disk.totalBytes) }}
-          </p>
-        </UCard>
-      </UPageGrid>
-
-      <UPageGrid v-if="status === 'pending' && !data" class="mt-8">
+      <UPageGrid
+        v-if="status === 'pending' && !data"
+        class="grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 xl:grid-cols-3 2xl:grid-cols-4"
+      >
         <USkeleton v-for="index in 4" :key="index" class="h-56" />
       </UPageGrid>
 
       <UEmpty
         v-else-if="data?.projects.length === 0"
-        class="mt-8"
         title="No Bench projects found"
         description="Add a bench.yml file to a direct subdirectory of the configured projects directory."
       />
 
       <template v-else>
-        <section v-for="section in projectSections" :key="section.title" class="mt-8">
+        <section v-for="section in projectSections" :key="section.title">
           <h2 class="text-lg font-semibold">
             {{ section.title }}
           </h2>
 
-          <UPageGrid class="mt-4">
+          <UPageGrid class="mt-4 grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 xl:grid-cols-3 2xl:grid-cols-4">
             <UCard
               v-for="project in section.projects"
               :key="project.id"
@@ -541,7 +407,7 @@ async function start(id: string) {
           </UPageGrid>
         </section>
       </template>
-    </UContainer>
+    </main>
 
     <UContainer
       v-else
